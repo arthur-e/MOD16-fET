@@ -130,7 +130,9 @@ class MOD16(object):
 
         Returns
         -------
-        Number or numpy.ndarray
+        numpy.ndarray
+            The ET associated with a given PFT class; a (P x ...) array,
+            for P total PFT classes
         '''
         # Net radiation to surface, based on down-welling short-wave
         #   radiation and net long-wave radiation
@@ -249,7 +251,7 @@ class MOD16(object):
             # Result is the sum of the three components
             et_total.append((transpiration[i] + e_canopy[i] + e_soil[i]))
 
-        return et_total
+        return np.stack(et_total, axis = 0)
 
     @staticmethod
     def air_density(
