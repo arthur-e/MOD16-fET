@@ -138,7 +138,7 @@ from pathlib import Path
 from typing import Sequence
 from scipy import signal
 from matplotlib import pyplot
-from mod16 import MOD16, latent_heat_vaporization
+from mod16 import MOD16_FET, latent_heat_vaporization
 from mod16.utils import restore_bplut, pft_dominant
 from mod17.calibration import BlackBoxLikelihood, StochasticSampler
 
@@ -178,13 +178,13 @@ class MOD16StochasticSampler(StochasticSampler):
         weighted least squares)
     '''
     required_parameters = {
-        'ET': MOD16.required_parameters
+        'ET': MOD16_FET.required_parameters
     }
     required_drivers = {
         'ET': [
-            'lw_net_day', 'lw_net_night', 'sw_rad_day', 'sw_rad_night',
-            'sw_albedo', 'temp_day', 'temp_night', 'temp_annual', 'tmin',
-            'vpd_day', 'vpd_night', 'pressure', 'fpar', 'lai'
+            'lw_net', 'lw_net_day', 'lw_net_night', 'sw_rad', 'sw_rad_day',
+            'sw_albedo', 'tmean', 'tmin', 'tmax', 'mat', 'vpd', 'rhumidity',
+            'pressure', 'fpar', 'lai'
         ]
     }
 

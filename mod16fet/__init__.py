@@ -36,7 +36,7 @@ AIR_PRESSURE_RATE = GRAV_ACCEL / (TEMP_LAPSE_RATE * (GAS_LAW_CONST / AIR_MOL_WEI
 latent_heat_vaporization = lambda temp_k: (2.501 - 0.002361 * (temp_k - 273.15)) * 1e6
 
 
-class MOD16(object):
+class MOD16_FET(object):
     r'''
     The MODIS MxD16 Evapotranspiration model. The required model parameters are:
 
@@ -365,48 +365,6 @@ class MOD16(object):
         g_day = ratio * rad_net_day # i.e., SW and LW radiation during the day
         g_night = ratio * lw_net_night
         return g_day + g_night
-
-    @staticmethod
-    def vpd(qv10m: Number, pressure: Number, tmean: Number) -> Number:
-        r'''
-        Computes vapor pressure deficit (VPD) from surface meteorology:
-
-        $$
-        \text{VPD} = \left(610.7\times \text{exp}\left(
-          \frac{17.38\times T}{239 + T}
-        \right) - \text{AVP}\right)
-        $$
-
-        Where \(T\) is the temperature in deg K and the actual vapor pressure
-        (AVP) is given:
-
-        $$
-        \text{AVP} = \frac{\text{QV10M}\times
-            \text{P}}{0.622 + 0.379\times \text{QV10M}}
-        $$
-
-        Where P is the air pressure in Pascals and QV10M is the water vapor
-        mixing ratio at 10-meter height.
-
-        Parameters
-        ----------
-        qv10m : int or float or numpy.ndarray
-            Water vapor mixing ratio at 10-meter height (Pa)
-        pressure : int or float or numpy.ndarray
-            Atmospheric pressure (Pa)
-        tmean : int or float or numpy.ndarray
-            Mean daytime temperature (degrees K)
-
-        Returns
-        -------
-        int or float or numpy.ndarray
-        '''
-        temp_c = tmean - 273.15
-        # Actual vapor pressure (Gates 1980, Biophysical Ecology, p.311)
-        avp = (qv10m * pressure) / (0.622 + (0.379 * qv10m))
-        # Saturation vapor pressure (similar to FAO formula)
-        svp = 610.7 * np.exp((17.38 * temp_c) / (239 + temp_c))
-        return svp - avp
 
     @staticmethod
     def rhumidity(temp_k: Number, vpd: Number) -> Number:
