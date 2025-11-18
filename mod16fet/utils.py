@@ -4,10 +4,12 @@ Utilities related to the MOD16 algorithm.
 
 from __future__ import annotations
 import csv
+import itertools
 import os
 import numpy as np
 import pandas as pd
-import mod16
+import mod16fet
+from mod16fet import PFT_VALID, MOD16_FET
 from collections import Counter
 from typing import Callable, Sequence
 from pandas._typing import FilePath, ReadCsvBuffer
@@ -26,9 +28,31 @@ BPLUT_FIELD_LOOKUP = {
     'beta':             'beta'
 }
 
+def flatten(nested_list):
+    'Flattens a nested list'
+    return list(itertools.chain(*nested_list))
+
+
+def flatten_params_dict(params_dict):
+    '''
+    Flattens a parameter dictionary across PFTs.
+
+    Parameters
+    ----------
+    params_dict : dict
+
+    Returns
+    -------
+    list
+    '''
+    return flatten([
+        [params_dict[k][p] for k in MOD16_FET.required_parameters]
+        for p in PFT_VALID
+    ])
+
+
 def pft_dominant(
-        pft_map: np.ndarray, site_list: list = None,
-        valid_pft: list = (1,2,3,4,5,6,7,8,9,10,12)):
+        pft_map: np.ndarray, site_list: list = None):
     '''
     Returns the dominant PFT type, based on the PFT mode among the sub-grid
     for each site. Note that this is specific to the MOD17 calibration/
@@ -50,9 +74,6 @@ def pft_dominant(
     site_list : list
         (Optional) List of the site names; must be provided to get PFT
         classes that accurately match the Cal/Val protocol
-    valid_pft : list
-        (Optional) List of valid PFT classes (Default: `range(1, 13)` but
-        without 11)
 
     Returns
     -------
@@ -63,7 +84,7 @@ def pft_dominant(
     for i in range(0, pft_map.shape[0]):
         try:
             pft_dom[i] = Counter(
-                list(filter(lambda x: x in valid_pft, pft_map[i])))\
+                list(filter(lambda x: x in PFT_VALID, pft_map[i])))\
                 .most_common()[0][0]
         except:
             # Skip those sites that have no valid PFTs
@@ -96,13 +117,13 @@ def restore_bplut(
     -------
     dict
     '''
+    pft_lookup = np.array(PFT_VALID)
     # Remaps Maosheng's PFT order to the actual PFT code from MCD12Q1
     #   LC_Type2
-    pft_lookup = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12]
     data = pd.read_csv(path_or_buffer, nrows = nrows)
     # Create a dictionary with an array for every key
     output = dict([
-        (k, np.full((13,), np.nan))
+        (k, np.full((len(PFT_VALID),), np.nan))
         for k in BPLUT_FIELD_LOOKUP.values()
     ])
     # Assumes the first column indexes the parameter/ field names
