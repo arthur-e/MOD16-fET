@@ -64,6 +64,8 @@ class MOD16_FET(object):
     params : dict
         Dictionary of model parameters
     '''
+    # NOTE: These are required for *each* PFT; e.g., if there were 2 PFTs
+    #   then twice the number of parameters (below) would be required
     required_parameters = [
         'tmin_close', 'tmin_open', 'vpd_open', 'vpd_close', 'gl_sh', 'gl_wv',
         'g_cuticular', 'csl', 'rbl_min', 'rbl_max', 'beta'
@@ -86,9 +88,10 @@ class MOD16_FET(object):
 
         Parameters
         ----------
-        params : list
-            A list of arrays, each array representing a different parameter,
-            in the order specified by `MOD16.required_parameters`. Each array
+        parameters : Sequence
+            A list of numbers, or arrays, each array representing a different
+            parameter, in the order specified by
+            `MOD16_FET.required_parameters`. Each array
             should be a (1 x N) array, where N is the number of sites/pixels.
         *drivers
             Every subsequent argument is a separate (T x N) where T is the
@@ -99,11 +102,10 @@ class MOD16_FET(object):
         numpy.ndarray
             The total latent heat flux [W m-2] for each site/pixel
         '''
-        day, night = MOD16._evapotranspiration(
+        return MOD16_FET._evapotranspiration(
             parameters, lw_net, lw_net_day, lw_net_night, sw_rad, sw_rad_day,
             sw_albedo, tmean, tmin, tmax, mat, vpd, rhumidity, pressure, fpar,
             lai, f_wet = None, tiny = 1e-7, r_corr = r_corr)
-        return np.add(day, night)
 
     @staticmethod
     def _evapotranspiration(
@@ -114,15 +116,16 @@ class MOD16_FET(object):
         '''
         Optimized ET code, intended for use in model calibration ONLY. The
         `params` are expected to be given in the order specified by
-        `MOD16.required_parameters`. NOTE: total ET values returned are in
+        `MOD16_FET.required_parameters`. NOTE: total ET values returned are in
         [W m-2], for comparison to tower ET values. Divide by the latent heat
         of vaporization (J kg-1) to obtain a mass flux (kg m-2 s-1).
 
         Parameters
         ----------
-        params : list
-            A list of arrays, each array representing a different parameter,
-            in the order specified by `MOD16.required_parameters`. Each array
+        parameters : Sequence
+            A list of numbers, or arrays, each array representing a different
+            parameter, in the order specified by
+            `MOD16_FET.required_parameters`. Each array
             should be a (1 x N) array, where N is the number of sites/pixels.
         *drivers
             Every subsequent argument is a separate (T x N) where T is the
@@ -139,7 +142,7 @@ class MOD16_FET(object):
         rad_net = sw_rad * (1 - sw_albedo) + lw_net
         rad_net_day = sw_rad_day * (1 - sw_albedo) + lw_net_day
         # Ground heat flux
-        g_soil = MOD16.ground_heat_flux(rad_net_day, lw_net_night, tmin, tmax)
+        g_soil = MOD16_FET.ground_heat_flux(rad_net_day, lw_net_night, tmin, tmax)
         # Radiation received by the soil, see Section 2.2 of User Guide
         rad_soil = (1 - fpar) * (rad_net - g_soil)
         # Radiation intercepted by the canopy
@@ -160,7 +163,7 @@ class MOD16_FET(object):
             r_corr = (101300 / pressure) * (tmean / 293.15)**1.75
 
         # Resistance to radiative heat transfer through air ("rrc")
-        rho = MOD16.air_density(tmean, pressure, rhumidity) # Air density
+        rho = MOD16_FET.air_density(tmean, pressure, rhumidity) # Air density
         r_r = (rho * SPECIFIC_HEAT_CAPACITY_AIR) / (
             4 * STEFAN_BOLTZMANN * tmean**3)
 
@@ -168,9 +171,15 @@ class MOD16_FET(object):
         e_soil = list()
         transpiration = list()
         et_total = list()
-        for i, pft in enumerate(PFT_VALID):
-            # NOTE: Getting the parameters for *this* PFT class
-            params = parameters[i]
+        n_params = len(MOD16_FET.required_parameters)
+        n_pft = len(PFT_VALID)
+        # Get the start, end indices of the parameters for each PFT
+        starts = np.arange(0, n_params * n_pft, n_params)
+        for i0, i1 in zip(starts, starts + n_params):
+            # NOTE: Getting the parameters for *this* PFT class;
+            #   params[i] below will refer to the ith parameter of the
+            #   MOD16_FET.required_parameters vector
+            params = parameters[i0:i1]
             # Anticipate warnings because, in some cases, f_wet may be zero,
             #   which would lead to zero in the denominator of r_h and r_e
             with warnings.catch_warnings():
@@ -249,7 +258,7 @@ class MOD16_FET(object):
             e_soil.append(e)
 
             # Result is the sum of the three components
-            et_total.append((transpiration[i] + e_canopy[i] + e_soil[i]))
+            et_total.append((transpiration[-1] + e_canopy[-1] + e_soil[-1]))
 
         return np.stack(et_total, axis = 0)
 
