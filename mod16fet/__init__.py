@@ -79,7 +79,7 @@ class MOD16_FET(object):
     @staticmethod
     def _et(
             parameters, lw_net, lw_net_day, lw_net_night, sw_rad, sw_rad_day,
-            sw_albedo, tmean, tmin, tmax, mat, vpd, rhumidity, pressure, fpar,
+            sw_albedo, tmean, tmin, tmax, vpd, rhumidity, pressure, fpar,
             lai, f_wet = None, tiny = 1e-7, r_corr = None
         ) -> Number:
         '''
@@ -104,13 +104,13 @@ class MOD16_FET(object):
         '''
         return MOD16_FET._evapotranspiration(
             parameters, lw_net, lw_net_day, lw_net_night, sw_rad, sw_rad_day,
-            sw_albedo, tmean, tmin, tmax, mat, vpd, rhumidity, pressure, fpar,
+            sw_albedo, tmean, tmin, tmax, vpd, rhumidity, pressure, fpar,
             lai, f_wet = None, tiny = 1e-7, r_corr = r_corr)
 
     @staticmethod
     def _evapotranspiration(
             parameters, lw_net, lw_net_day, lw_net_night, sw_rad, sw_rad_day,
-            sw_albedo, tmean, tmin, tmax, mat, vpd, rhumidity, pressure, fpar,
+            sw_albedo, tmean, tmin, tmax, vpd, rhumidity, pressure, fpar,
             lai, f_wet = None, tiny = 1e-7, r_corr = None
         ) -> Iterable[Tuple[Sequence, Sequence]]:
         '''

@@ -87,10 +87,6 @@ surrounding a tower:
       *MOD15A2HGF_fPAR
           -- (T x N x P) Fraction of photosynthetically active radiation [%]
 
-    *IMERG/
-      *mean_annual_precip
-          -- (Y x N) Mean annual precipitation in each year (Y years)
-
     coordinates/
       lng_lat       -- (2 x N) Longitude, latitude coordinates of each tower
 
@@ -144,7 +140,7 @@ from mod17.calibration import BlackBoxLikelihood, StochasticSampler
 MOD16_DIR = os.path.dirname(mod16fet.__file__)
 DRIVER_NAMES = (
     'lw_net', 'lw_net_day', 'lw_net_night', 'sw_rad', 'sw_rad_day', 'sw_albedo',
-    'tmean', 'tmin', 'tmax', 'mat', 'vpd', 'rhumidity', 'pressure',
+    'tmean', 'tmin', 'tmax', 'vpd', 'rhumidity', 'pressure',
     'fpar', 'lai'
 )
 
@@ -330,32 +326,26 @@ class CalibrationAPI(object):
                     blacklist = np.array(blacklist)
                     site_mask = (~np.in1d(sites, blacklist))
 
-            # TODO
-            # # Get tower weights, for when towers are too close together
-            # weights = hdf['weights'][:]
-            # # If only a single value is given for each site, repeat the weight
-            # #   along the time axis
-            # if weights.ndim == 1:
-            #     weights = weights[None,...].repeat(nsteps, axis = 0)
-            # weights = weights[:,site_mask]
-
-            import ipdb
-            ipdb.set_trace()#FIXME
+            # Get tower weights, for when towers are too close together
+            weights = hdf['weights'][:]
+            # If only a single value is given for each site, repeat the weight
+            #   along the time axis
+            if weights.ndim == 1:
+                weights = weights[None,...].repeat(nsteps, axis = 0)
+            weights = weights[:,site_mask]
 
             # Get a (P x T x N) array of PFT fractions
             pft_map = pft_map[:,(time[:,0] - time[:,0].min())]
             pft_map = pft_map[:,t0:]
+            # Subset to just those sites we'll be using
+            pft_map = pft_map[...,site_mask]
 
             # Read in tower observations; we select obs of interest in three
             #   steps because we want *only* matching tower-day observations
             #   but we'll want driver data for a full year if that year
             #   contains *any* matching tower-day observations
             print('Masking out validation data...')
-            tower_obs = hdf[self.config['data']['target_observable']][t0:]
-            tower_obs[~pft_mask] = np.nan # Step 1: Mask out invalid days
-            # Step 2: Mask out validation samples
-            tower_obs[hdf['FLUXNET/validation_mask'][pft]] = np.nan
-            tower_obs = tower_obs[:,site_mask] # Step 3: Select matching sites
+            tower_obs = hdf[self.config['data']['target_observable']][t0:,site_mask]
 
             # Read in driver datasets
             print('Loading driver datasets...')
@@ -377,11 +367,6 @@ class CalibrationAPI(object):
             if tmin.min() < 0 or tmin.max() < 100:
                 print("WARNING: Temperatures are expected in deg K but may actually be in deg C")
 
-            # Assumed that annual mean is (T x N) array, with the same
-            #   annual value copied to each time step if time steps are
-            #   more frequent than one year
-            temp_annual = hdf[lookup['MAT']][t0:][:,site_mask]
-
             # After VPD is calculated, air pressure is based solely
             #   on elevation
             elevation = hdf[lookup['elevation']][:]
@@ -391,7 +376,7 @@ class CalibrationAPI(object):
             if elevation.ndim == 3:
                 # If there is a site sub-grid...
                 elevation = elevation.mean(axis = -1)
-            pressure = mod16fet.air_pressure(elevation)
+            pressure = MOD16_FET.air_pressure(elevation)
 
             # Read in fPAR, LAI
             fpar = hdf[lookup['fPAR']][t0:][:,site_mask]
@@ -408,12 +393,16 @@ class CalibrationAPI(object):
             fpar /= 100
             lai /= 10
 
+        # TODO
+        import ipdb
+        ipdb.set_trace()#FIXME
+
         drivers = dict(zip(DRIVER_NAMES, [
             lw_net, lw_net_day, lw_net_night, sw_rad, sw_rad_day, sw_albedo,
-            tmean, tmin, tmax, mat, vpd, rhumidity, pressure, fpar, lai]))
+            tmean, tmin, tmax, vpd, rhumidity, pressure, fpar, lai]))
         # Clean the tower observations
         tower_obs = self.clean_observed(tower_obs)
-        return (tower_obs, drivers, weights, constraints)
+        return (tower_obs, drivers, weights, pft_map)
 
     def clean_observed(
             self, raw: Sequence, filter_length: int = 2) -> Sequence:
