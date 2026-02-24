@@ -120,6 +120,7 @@ functional form of the prior; currently, this is hard-coded into the
 import datetime
 import yaml
 import os
+import warnings
 import numpy as np
 import h5py
 import pymc as pm
@@ -232,37 +233,59 @@ class SimultaneousStochasticSampler(AbstractSampler):
         -------
         pm.Model
         '''
+        # A function to extract the values of a sequence-valued dictionary
+        repack = lambda d, pft: dict([(k, v[pft]) for k, v in d.items()])
         # Define the objective/ likelihood function
         log_likelihood = BlackBoxLikelihood(
             self.model, observed, x = drivers, weights = self.weights,
             objective = self.config['optimization']['objective'],
             constraints = self.constraints)
+        # Prepare to add parameters for each PFT
+        n_params = len(MOD16_FET.required_parameters)
+        n_pft = len(PFT_VALID)
+        # Get the start, end indices of the parameters for each PFT
+        starts = np.arange(0, n_params * n_pft, n_params)
         # With this context manager, "all PyMC3 objects introduced in the indented
         #   code block...are added to the model behind the scenes."
         with pm.Model() as model:
             params_list = []
             # (Stochstic) Priors for unknown model parameters
-            for pft in PFT_VALID:
-                import ipdb
-                ipdb.set_trace()#FIXME
-                # params_list.append()
-            # tmin_close = self.params['tmin_close']
-            # tmin_open = self.params['tmin_open']
-            # vpd_open = self.params['vpd_open']
-            # vpd_close =   pm.Uniform('vpd_close', **self.prior['vpd_close'])
-            # gl_sh =       pm.LogNormal('gl_sh', **self.prior['gl_sh'])
-            # gl_wv =       pm.LogNormal('gl_wv', **self.prior['gl_wv'])
-            # g_cuticular = pm.LogNormal(
-            #     'g_cuticular', **self.prior['g_cuticular'])
-            # csl =         pm.LogNormal('csl', **self.prior['csl'])
-            # rbl_min =     pm.Triangular('rbl_min', **self.prior['rbl_min'])
-            # rbl_max =     pm.Triangular('rbl_max', **self.prior['rbl_max'])
-            # beta =        pm.Uniform('beta', **self.prior['beta'])
-            #
-            # # Convert model parameters to a tensor vector
-            # params = pt.as_tensor_variable(params_list)
-            # # Key step: Define the log-likelihood as an added potential
-            # pm.Potential('likelihood', log_likelihood(params))
+            for j, idx in enumerate(zip(starts, starts + n_params)):
+                i0, i1 = idx
+                pft = PFT_VALID[j] # Just in case PFT codes start at int > 0
+                # NOTE: Getting the parameters for *this* PFT class;
+                #   params[i] below will refer to the ith parameter of the
+                #   MOD16_FET.required_parameters vector
+                params = self.params[i0:i1]
+                # NOTE: tmin_close, tmin_open, and vpd_open are just copied from
+                #   the original parameters table
+                tmin_close = params[0]
+                tmin_open = params[1]
+                vpd_open = params[2]
+                vpd_close =   pm.Uniform(
+                    f'vpd_close{pft}', **repack(self.prior['vpd_close'], pft))
+                gl_sh =       pm.LogNormal(
+                    f'gl_sh{pft}', **repack(self.prior['gl_sh'], pft))
+                gl_wv =       pm.LogNormal(
+                    f'gl_wv{pft}', **repack(self.prior['gl_wv'], pft))
+                g_cuticular = pm.LogNormal(
+                    f'g_cuticular{pft}', **repack(self.prior['g_cuticular'], pft))
+                csl =         pm.LogNormal(
+                    f'csl{pft}', **repack(self.prior['csl'], pft))
+                rbl_min =     pm.Triangular(
+                    f'rbl_min{pft}', **repack(self.prior['rbl_min'], pft))
+                rbl_max =     pm.Triangular(
+                    f'rbl_max{pft}', **repack(self.prior['rbl_max'], pft))
+                beta =        pm.Uniform(
+                    f'beta{pft}', **repack(self.prior['beta'], pft))
+                params_list.extend([
+                    tmin_close, tmin_open, vpd_open, vpd_close, gl_sh, gl_wv,
+                    g_cuticular, csl, rbl_min, rbl_max, beta])
+
+            # Convert model parameters to a tensor vector
+            params = pt.as_tensor_variable(params_list)
+            # Key step: Define the log-likelihood as an added potential
+            pm.Potential('likelihood', log_likelihood(params))
         return model
 
     def run(
