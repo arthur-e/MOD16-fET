@@ -114,7 +114,7 @@ because the only supported constraint (annual precipitation) requires a
 NOTE: The biggest improvement needed here is a way for users to specify not
 just the values of the prior and which parameters are fixed but also the
 functional form of the prior; currently, this is hard-coded into the
-`compile_et()` function.
+`compile_et_model()` function.
 '''
 
 import datetime
@@ -130,12 +130,12 @@ from collections import OrderedDict
 from functools import partial
 from statistics import mode
 from pathlib import Path
-from typing import Sequence
+from typing import Callable, Sequence
 from scipy import signal
 from matplotlib import pyplot
-from mod16fet import MOD16_FET, latent_heat_vaporization
+from mod17.calibration import AbstractSampler, BlackBoxLikelihood
+from mod16fet import MOD16_FET, PFT_VALID, latent_heat_vaporization
 from mod16fet.utils import restore_bplut, pft_dominant, flatten_params_dict
-from mod17.calibration import BlackBoxLikelihood, StochasticSampler
 
 MOD16_DIR = os.path.dirname(mod16fet.__file__)
 DRIVER_NAMES = (
@@ -145,12 +145,12 @@ DRIVER_NAMES = (
 )
 
 
-class MOD16StochasticSampler(StochasticSampler):
+class SimultaneousStochasticSampler(AbstractSampler):
     '''
-    A Markov Chain-Monte Carlo (MCMC) sampler for mod16fet. The specific sampler
-    used is the Differential Evolution (DE) MCMC algorithm described by
-    Ter Braak (2008), though the implementation is specific to the PyMC3
-    library.
+    A Markov Chain-Monte Carlo (MCMC) sampler for MOD16-fET. The
+    specific sampler used is the Differential Evolution (DE) MCMC algorithm
+    described by Ter Braak (2008), though the implementation is specific to
+    the PyMC3 library.
 
     Parameters
     ----------
@@ -160,18 +160,22 @@ class MOD16StochasticSampler(StochasticSampler):
         The function to call (with driver data and parameters); this function
         should take driver data as positional arguments and the model
         parameters as a `*Sequence`; it should require no external state.
-    observed : Sequence
-        Sequence of observed values that will be used to calibrate the model;
-        i.e., model is scored by how close its predicted values are to the
-        observed values
-    params_dict : dict or None
-        Dictionary of model parameters, to be used as initial values and as
-        the basis for constructing a new dictionary of optimized parameters
+    params_vector : Sequence or None
+        TODO FIXME
     backend : str or None
         Path to a NetCDF4 file backend (Default: None)
     weights : Sequence or None
         Optional sequence of weights applied to the model residuals (as in
         weighted least squares)
+    constraints : Sequence or None
+        Sequence of one or more Callables (function) that return a competing
+        value of the objective function (e.g., an RMSE). If there is more than
+        one Callable, they are each called and the largest value is retained.
+        If the (final) return value is greater than the value of the original
+        objective function, than that value is returned instead. This is a way
+        to tell the sampler that certain conditions are associated, e.g., with
+        very high RMSE. Each Callable should take one argument: a vector of
+        model predictions.
     '''
     required_parameters = {
         'ET': MOD16_FET.required_parameters
@@ -179,6 +183,22 @@ class MOD16StochasticSampler(StochasticSampler):
     required_drivers = {
         'ET': DRIVER_NAMES
     }
+
+    def __init__(
+            self, config: dict, model: Callable, params_vector: Sequence = None,
+            backend: str = None, weights: Sequence = None,
+            constraints: Sequence = None):
+        self.backend = backend
+        self.config = config
+        self.constraints = constraints
+        self.model = model
+        if hasattr(model, '__name__'):
+            self.name = model.__name__.strip('_').upper() # "_gpp" = "GPP"
+        self.params = params_vector
+        # Set the model's prior distribution assumptions and any fixed values
+        self.prior = dict()
+        self.weights = weights
+        assert os.path.exists(os.path.dirname(backend))
 
     def compile_et_model(
             self, observed: Sequence, drivers: Sequence) -> pm.Model:
@@ -220,43 +240,116 @@ class MOD16StochasticSampler(StochasticSampler):
         # With this context manager, "all PyMC3 objects introduced in the indented
         #   code block...are added to the model behind the scenes."
         with pm.Model() as model:
-            # NOTE: Parameters shared with MOD17 are fixed based on MOD17
-            #   re-calibration
-            tmin_close = self.params['tmin_close']
-            tmin_open = self.params['tmin_open']
-            vpd_open = self.params['vpd_open']
-            vpd_close =   pm.Uniform('vpd_close', **self.prior['vpd_close'])
-            gl_sh =       pm.LogNormal('gl_sh', **self.prior['gl_sh'])
-            gl_wv =       pm.LogNormal('gl_wv', **self.prior['gl_wv'])
-            g_cuticular = pm.LogNormal(
-                'g_cuticular', **self.prior['g_cuticular'])
-            csl =         pm.LogNormal('csl', **self.prior['csl'])
-            rbl_min =     pm.Triangular('rbl_min', **self.prior['rbl_min'])
-            rbl_max =     pm.Triangular('rbl_max', **self.prior['rbl_max'])
-            beta =        pm.Uniform('beta', **self.prior['beta'])
+            params_list = []
             # (Stochstic) Priors for unknown model parameters
-            params_list = [
-                tmin_close, tmin_open, vpd_open, vpd_close, gl_sh, gl_wv,
-                g_cuticular, csl, rbl_min, rbl_max, beta
-            ]
-            # Convert model parameters to a tensor vector
-            params = pt.as_tensor_variable(params_list)
-            # Key step: Define the log-likelihood as an added potential
-            pm.Potential('likelihood', log_likelihood(params))
-        # If the value for this parameter (and this PFT) is fixed...
-        fixed = dict()
-        for i, name in enumerate(self.required_parameters['ET']):
-            if self.fixed is not None:
-                if name in self.fixed.keys():
-                    if self.fixed[name] is not None:
-                        # e.g., {beta: fixed_value}
-                        fixed[getattr(model, name)] = self.fixed[name]
-        if len(fixed) > 0:
-            # i.e., Return "a distinct PyMC model with the relevant variables
-            #   replaced by the intervention expressions; all remaining
-            #   variables are cloned"
-            return pm.do(model, fixed)
+            for pft in PFT_VALID:
+                import ipdb
+                ipdb.set_trace()#FIXME
+                # params_list.append()
+            # tmin_close = self.params['tmin_close']
+            # tmin_open = self.params['tmin_open']
+            # vpd_open = self.params['vpd_open']
+            # vpd_close =   pm.Uniform('vpd_close', **self.prior['vpd_close'])
+            # gl_sh =       pm.LogNormal('gl_sh', **self.prior['gl_sh'])
+            # gl_wv =       pm.LogNormal('gl_wv', **self.prior['gl_wv'])
+            # g_cuticular = pm.LogNormal(
+            #     'g_cuticular', **self.prior['g_cuticular'])
+            # csl =         pm.LogNormal('csl', **self.prior['csl'])
+            # rbl_min =     pm.Triangular('rbl_min', **self.prior['rbl_min'])
+            # rbl_max =     pm.Triangular('rbl_max', **self.prior['rbl_max'])
+            # beta =        pm.Uniform('beta', **self.prior['beta'])
+            #
+            # # Convert model parameters to a tensor vector
+            # params = pt.as_tensor_variable(params_list)
+            # # Key step: Define the log-likelihood as an added potential
+            # pm.Potential('likelihood', log_likelihood(params))
         return model
+
+    def run(
+            self, observed: Sequence, drivers: Sequence,
+            draws = 1000, chains = 3, tune = 'lambda', scaling: float = 1e-3,
+            prior: dict = dict(), fixed: dict = dict(),
+            check_shape: bool = False, save_fig: bool = False,
+            show_fig: bool = True, var_names: Sequence = None) -> None:
+        '''
+        Fits the model using DE-MCMCz approach. `tune="lambda"` (default) is
+        recommended; lambda is related to the scale of the jumps learned from
+        other chains, but epsilon ("scaling") controls the scale directly.
+        Using a larger value for `scaling` (Default: 1e-3) will produce larger
+        jumps and may directly address "sticky" chains.
+
+        Parameters
+        ----------
+        observed : Sequence
+            The observed data the model will be calibrated against
+        drivers : list or tuple
+            Sequence of driver datasets to be supplied, in order, to the
+            model's run function
+        draws : int
+            Number of samples to draw (on each chain); defaults to 1000
+        chains : int
+            Number of chains; defaults to 3
+        tune : str or None
+            Which hyperparameter to tune: Defaults to 'lambda', but can also
+            be 'scaling' or None.
+        scaling : float
+            Initial scale factor for epsilon (Default: 1e-3)
+        prior : dict
+            Dictionary of parameters and their prior values;
+            should be of the form `{parameter: value}`
+        fixed : dict
+            Dictionary of parameters for which a fixed value should be used;
+            should be of the form `{parameter: value}`
+        check_shape : bool
+            True to require that input driver datasets have the same shape as
+            the observed values (Default: False)
+        save_fig : bool
+            True to save figures to files instead of showing them
+            (Default: False)
+        show_fig: bool
+            True to show the trace plot at the end of a run (Default: True)
+        var_names : Sequence
+            One or more variable names to show in the plot
+        '''
+        assert not check_shape or drivers[0].shape == observed.shape,\
+            'Driver data should have the same shape as the "observed" data'
+        assert len(drivers) == len(self.required_drivers[self.name]),\
+            'Did not receive expected number of driver datasets!'
+        assert tune in ('lambda', 'scaling') or tune is None
+        self.prior.update(prior) # Update prior assumptions
+        # Generate an initial goodness-of-fit score
+        predicted = self.model(self.params, *drivers)
+        if self.weights is not None:
+            score = np.sqrt(
+                np.nanmean(((predicted - observed) * self.weights) ** 2))
+        else:
+            score = np.sqrt(np.nanmean(((predicted - observed)) ** 2))
+        print('-- RMSD at the initial point: %.3f' % score)
+        print('Compiling model...')
+        try:
+            compiler = getattr(self, 'compile_%s_model' % self.name.lower())
+        except AttributeError:
+            raise AttributeError('''Could not find a compiler for model named
+            "%s"; make sure that a function "compile_%s_model()" is defined on
+             this class''' % (model_name, model_name))
+        with compiler(observed, drivers) as model:
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore')
+                step_func = pm.DEMetropolisZ(tune = tune, scaling = scaling)
+                trace = pm.sample(
+                    draws = draws, step = step_func, cores = chains,
+                    chains = chains, idata_kwargs = {'log_likelihood': True})
+            if self.backend is not None:
+                print('Writing results to file...')
+                trace.to_netcdf(self.backend)
+            if var_names is None:
+                az.plot_trace(trace, var_names = ['~log_likelihood'])
+            else:
+                az.plot_trace(trace, var_names = var_names)
+            if save_fig:
+                pyplot.savefig('.'.join(self.backend.split('.')[:-1]) + '.png')
+            elif show_fig:
+                pyplot.show()
 
 
 class CalibrationAPI(object):
@@ -355,10 +448,11 @@ class CalibrationAPI(object):
             if exceptions is not None:
                 lookup.update(exceptions)
 
-            # TODO Need to extract 24-hour net SWGDN, LWGNT from MERRA-2
-            lw_net_day = hdf[lookup['LWGNT'][0]][t0:][:,site_mask]
-            lw_net_night = hdf[lookup['LWGNT'][1]][t0:][:,site_mask]
-            sw_rad_day = hdf[lookup['SWGDN'][0]][t0:][:,site_mask]
+            lw_net = hdf[lookup['LWGNT'][0]][t0:][:,site_mask]
+            lw_net_day = hdf[lookup['LWGNT'][1]][t0:][:,site_mask]
+            lw_net_night = hdf[lookup['LWGNT'][2]][t0:][:,site_mask]
+            sw_rad = hdf[lookup['SWGDN'][0]][t0:][:,site_mask]
+            sw_rad_day = hdf[lookup['SWGDN'][1]][t0:][:,site_mask]
             sw_albedo = hdf[lookup['albedo']][t0:][:,site_mask]
             tmean = hdf[lookup['Tmean']][t0:][:,site_mask]
             tmax = hdf[lookup['Tmax']][t0:][:,site_mask]
@@ -366,6 +460,9 @@ class CalibrationAPI(object):
             vpd = hdf[lookup['VPD']][t0:][:,site_mask]
             if tmin.min() < 0 or tmin.max() < 100:
                 print("WARNING: Temperatures are expected in deg K but may actually be in deg C")
+
+            # Compute relative humidity
+            rhumidity = MOD16_FET.rhumidity(tmean, vpd)
 
             # After VPD is calculated, air pressure is based solely
             #   on elevation
@@ -392,10 +489,6 @@ class CalibrationAPI(object):
             # Convert fPAR from (%) to [0,1] and re-scale LAI; reshape fPAR and LAI
             fpar /= 100
             lai /= 10
-
-        # TODO
-        import ipdb
-        ipdb.set_trace()#FIXME
 
         drivers = dict(zip(DRIVER_NAMES, [
             lw_net, lw_net_day, lw_net_night, sw_rad, sw_rad_day, sw_albedo,
@@ -573,12 +666,10 @@ class CalibrationAPI(object):
         tower_obs, drivers, weights, constr = self._load_data()
 
         print('Initializing sampler...')
+        backend = self.config['optimization']['backend']
         sampler = MOD16StochasticSampler(
             self.config, mod16fet._et, params_dict, backend = backend,
             weights = weights, constraints = constraints)
-
-        import ipdb
-        ipdb.set_trace()#FIXME
 
         # Either: Enter diagnostic mode or run the sampler
         if plot_trace or ipdb:

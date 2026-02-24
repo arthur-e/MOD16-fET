@@ -34,12 +34,12 @@ data:
     Tmean: "Gridmet/Tmean" # (T x N)
     Tmax: "Gridmet/Tmax" # (T x N)
     VPD: "Gridmet/VPD" # Mean annual temperature (T x N)
-    # Should be lists of [daytime, nighttime] field names
-    SWGDN: ["MERRA2/SWGDN_daytime", ~] # No nighttime SWGDN
-    LWGNT: ["MERRA2/LWGNT_daytime", "MERRA2/LWGNT_nighttime"] # (T x N)
+    # Should be lists of [24-hour, daytime, nighttime] field names
+    SWGDN: ["MERRA2/SWGDN", "MERRA2/SWGDN_daytime", ~] # No nighttime SWGDN
+    LWGNT: ["MERRA2/LWGNT", "MERRA2/LWGNT_daytime", "MERRA2/LWGNT_nighttime"] # (T x N)
 optimization:
   # The filename should have two "%s" formatting characters in it
-  backend_template: "/Stout1/MODIS_VIIRS/CONUS_30m_ET/calibration/backends/20260217_MOD16-fET_%s_calibration.nc4"
+  backend: "/Stout1/MODIS_VIIRS/CONUS_30m_ET/calibration/backends/20260217_MOD16-fET_calibration.nc4"
   prior: "/usr/local/dev/MOD16-fET/mod16fet/data/MOD16_BPLUT_prior_20251113.yaml"
   chains: 3
   draws: 20000
