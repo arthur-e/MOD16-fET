@@ -78,13 +78,13 @@ class MOD16_FET(object):
 
     @staticmethod
     def _et(
-            parameters, lw_net, lw_net_day, lw_net_night, sw_rad, sw_rad_day,
+            parameters, pft_map, lw_net, lw_net_day, lw_net_night, sw_rad, sw_rad_day,
             sw_albedo, tmean, tmin, tmax, vpd, rhumidity, pressure, fpar,
             lai, f_wet = None, tiny = 1e-7, r_corr = None
         ) -> Number:
         '''
         Optimized ET code, intended for use in model calibration ONLY.
-        Returns combined day and night ET.
+        Returns total ET, not fractional ET.
 
         Parameters
         ----------
@@ -93,6 +93,9 @@ class MOD16_FET(object):
             parameter, in the order specified by
             `MOD16_FET.required_parameters`. Each array
             should be a (1 x N) array, where N is the number of sites/pixels.
+        pft_map : numpy.ndarray
+            An array of shape (P x T x N) for P PFTs, T time steps, N sites,
+            quantifying the fractional coverage of PFT for each unique (T x N)
         *drivers
             Every subsequent argument is a separate (T x N) where T is the
             number of time steps and N is the number of sites/pixels.
@@ -102,17 +105,19 @@ class MOD16_FET(object):
         numpy.ndarray
             The total latent heat flux [W m-2] for each site/pixel
         '''
-        return MOD16_FET._evapotranspiration(
+        et = MOD16_FET._evapotranspiration(
             parameters, lw_net, lw_net_day, lw_net_night, sw_rad, sw_rad_day,
             sw_albedo, tmean, tmin, tmax, vpd, rhumidity, pressure, fpar,
             lai, f_wet = None, tiny = 1e-7, r_corr = r_corr)
+        # Return the weighted sum of ET
+        return np.nansum(et * pft_map, axis = 0)
 
     @staticmethod
     def _evapotranspiration(
             parameters, lw_net, lw_net_day, lw_net_night, sw_rad, sw_rad_day,
             sw_albedo, tmean, tmin, tmax, vpd, rhumidity, pressure, fpar,
             lai, f_wet = None, tiny = 1e-7, r_corr = None
-        ) -> Iterable[Tuple[Sequence, Sequence]]:
+        ) -> Number:
         '''
         Optimized ET code, intended for use in model calibration ONLY. The
         `params` are expected to be given in the order specified by

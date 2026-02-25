@@ -61,31 +61,24 @@ surrounding a tower:
       *latent_heat      -- (T x N) Observed latent heat flux [W m-2]
       validation_mask   -- (L x T x N) Indicates what site-days are reserved
 
-    *MERRA2/
+    *Gridmet/
       LWGNT             -- (T x N) Net long-wave radiation, 24-hr mean [W m-2]
       LWGNT_daytime     -- (T x N) ... for daytime hours only
       LWGNT_nighttime   -- (T x N) ... for nighttime hours only
-      PS                -- (T x N) Surface air pressure [Pa], 24-hr mean
-      PS_daytime        -- (T x N) ... for daytime hours only
-      PS_nighttime      -- (T x N) ... for nighttime hours only
-      QV10M             -- (T x N) Water vapor mixing ratio at 10-meter height
-      QV10M_daytime     -- (T x N) ... for daytime hours only
-      QV10M_nighttime   -- (T x N) ... for nighttime hours only
       SWGDN             -- (T x N) Down-welling short-wave radiation [W m-2]
       SWGDN_daytime     -- (T x N) ... for daytime hours only
-      SWGDN_nighttime   -- (T x N) ... for nighttime hours only
-      T10M              -- (T x N) Air temperature at 10-meter height [deg K]
-      T10M_daytime      -- (T x N) ... for daytime hours only
-      T10M_nighttime    -- (T x N) ... for nighttime hours only
       Tmin              -- (T x N) Daily minimum air temperature [deg K]
+      Tmax              -- (T x N) Daily maximum air temperature [deg K]
+      Tmean             -- (T x N) Daily average air temperature [deg K]
 
     *MODIS/
       *MCD43GF_black_sky_sw_albedo
-          -- (T x N x P) Short-wave albedo under black-sky conditions
-      *MOD15A2HGF_LAI
-          -- (T x N x P) Leaf area index in scaled units (10 * [m3 m-3])
-      *MOD15A2HGF_fPAR
-          -- (T x N x P) Fraction of photosynthetically active radiation [%]
+          -- (T x N x P) Short-wave albedo under black-sky conditions [dim.]
+
+    *HISTARFM/
+      *LAI  -- (T x N x P) Leaf area index ([m3 m-3])
+      *fPAR -- (T x N x P) Fraction of photosynthetically active radiation,
+                            as a proportion of the area, i.e., on [0,1]
 
     coordinates/
       lng_lat       -- (2 x N) Longitude, latitude coordinates of each tower
@@ -95,9 +88,9 @@ surrounding a tower:
       *PFT_annual   -- (T x N x P) Same as "PFT" but with the option to change
                         PFT at every time step T; optional, but needed if the
                         land-cover classes (PFT classes) are dynamic
-      elevation_m   -- (N) The elevation in meters above sea level
+      *elevation_m  -- (N) The elevation in meters above sea level
 
-     site_id        -- (N) Unique identifier for each site, e.g., "US-BZS"
+    site_id         -- (N) Unique identifier for each site, e.g., "US-BZS"
     time            -- (T x 3) The Year, Month, Day of each daily time step
     weights         -- (N) A number between 0 and 1 used to down-weight towers
 
@@ -140,8 +133,8 @@ from mod16fet.utils import restore_bplut, pft_dominant, flatten_params_dict
 
 MOD16_DIR = os.path.dirname(mod16fet.__file__)
 DRIVER_NAMES = (
-    'lw_net', 'lw_net_day', 'lw_net_night', 'sw_rad', 'sw_rad_day', 'sw_albedo',
-    'tmean', 'tmin', 'tmax', 'vpd', 'rhumidity', 'pressure',
+    'pft_map', 'lw_net', 'lw_net_day', 'lw_net_night', 'sw_rad', 'sw_rad_day',
+    'sw_albedo', 'tmean', 'tmin', 'tmax', 'vpd', 'rhumidity', 'pressure',
     'fpar', 'lai'
 )
 
@@ -447,7 +440,7 @@ class CalibrationAPI(object):
             #   along the time axis
             if weights.ndim == 1:
                 weights = weights[None,...].repeat(nsteps, axis = 0)
-            weights = weights[:,site_mask]
+            weights = weights[t0:,site_mask]
 
             # Get a (P x T x N) array of PFT fractions; there's a much easier
             #   way to do this with indexing that *used* to work but no longer:
@@ -519,16 +512,13 @@ class CalibrationAPI(object):
                 sw_albedo = np.nanmean(sw_albedo, axis = -1)
                 fpar = np.nanmean(fpar, axis = -1)
                 lai = np.nanmean(lai, axis = -1)
-            # Convert fPAR from (%) to [0,1] and re-scale LAI; reshape fPAR and LAI
-            fpar /= 100
-            lai /= 10
 
         drivers = dict(zip(DRIVER_NAMES, [
-            lw_net, lw_net_day, lw_net_night, sw_rad, sw_rad_day, sw_albedo,
-            tmean, tmin, tmax, vpd, rhumidity, pressure, fpar, lai]))
+            pft_map, lw_net, lw_net_day, lw_net_night, sw_rad, sw_rad_day,
+            sw_albedo, tmean, tmin, tmax, vpd, rhumidity, pressure, fpar, lai]))
         # Clean the tower observations
         tower_obs = self.clean_observed(tower_obs)
-        return (tower_obs, drivers, weights, pft_map)
+        return (tower_obs, drivers, weights)
 
     def clean_observed(
             self, raw: Sequence, filter_length: int = 2) -> Sequence:
