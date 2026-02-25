@@ -423,18 +423,17 @@ class CalibrationAPI(object):
             if 'date_start' in self.config['data'].keys():
                 date_start = self.config['data']['date_start']
                 ds = datetime.datetime.strptime(date_start, '%Y-%m-%d')
-                t0 = np.argwhere(
+                t0 = int(np.argwhere(
                     np.logical_and(
                         np.logical_and(time[:,0] == ds.year,
                             time[:,1] == ds.month),
-                        time[:,2] == ds.day)).ravel()[0]
-                # i.e., time now starts at this start date
-                time = time[t0:]
+                        time[:,2] == ds.day)).ravel()[0])
             # Number of time steps
             nsteps = time.shape[0]
             # In case some tower sites should not be used
             blacklist = self.config['data']['sites_blacklisted']
-            pft_map = hdf[self.config['data']['class_map']][t0:]
+
+            pft_map = hdf[self.config['data']['class_map']]
             # Also, ensure the blacklist matches the shape of this mask;
             #   i.e., blacklisted sites should NEVER be used
             if blacklist is not None:
@@ -450,11 +449,22 @@ class CalibrationAPI(object):
                 weights = weights[None,...].repeat(nsteps, axis = 0)
             weights = weights[:,site_mask]
 
-            # Get a (P x T x N) array of PFT fractions
-            pft_map = pft_map[:,(time[:,0] - time[:,0].min())]
+            # Get a (P x T x N) array of PFT fractions; there's a much easier
+            #   way to do this with indexing that *used* to work but no longer:
+            #   pft_map = pft_map[:,(time[:,0] - time[:,0].min())]
+            year_idx = (time[:,0] - time[:,0].min())
+            new_pft_map = []
+            for idx in np.unique(year_idx):
+                n_repeats = np.in1d(year_idx, idx).sum()
+                new_pft_map.append(
+                    pft_map[:,idx][:,np.newaxis].repeat(n_repeats, axis = 1))
+            pft_map = np.concatenate(new_pft_map, axis = 1)
             pft_map = pft_map[:,t0:]
             # Subset to just those sites we'll be using
             pft_map = pft_map[...,site_mask]
+
+            # After subsetting the PFT map, time now starts at this start date
+            time = time[t0:]
 
             # Read in tower observations; we select obs of interest in three
             #   steps because we want *only* matching tower-day observations
@@ -496,7 +506,7 @@ class CalibrationAPI(object):
             if elevation.ndim == 3:
                 # If there is a site sub-grid...
                 elevation = elevation.mean(axis = -1)
-            pressure = MOD16_FET.air_pressure(elevation)
+            pressure = MOD16_FET.air_pressure(elevation)[t0:]
 
             # Read in fPAR, LAI
             fpar = hdf[lookup['fPAR']][t0:][:,site_mask]
