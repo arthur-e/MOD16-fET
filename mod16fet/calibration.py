@@ -257,6 +257,7 @@ class SimultaneousStochasticSampler(AbstractSampler):
                 vpd_open = params[2]
                 g_cuticular = params[6]
                 rbl_max = params[9]
+                beta = params[10]
                 vpd_close =   pm.Uniform(
                     f'vpd_close{pft}', **repack(self.prior['vpd_close'], pft))
                 gl_sh =       pm.LogNormal(
@@ -271,16 +272,16 @@ class SimultaneousStochasticSampler(AbstractSampler):
                     f'rbl_min{pft}', **repack(self.prior['rbl_min'], pft))
                 # rbl_max =     pm.Triangular(
                 #     f'rbl_max{pft}', **repack(self.prior['rbl_max'], pft))
-                beta =        pm.Uniform(
-                    f'beta{pft}', **repack(self.prior['beta'], pft))
+                # beta =        pm.Uniform(
+                #     f'beta{pft}', **repack(self.prior['beta'], pft))
                 params_list.extend([
                     tmin_close, tmin_open, vpd_open, vpd_close, gl_sh, gl_wv,
                     g_cuticular, csl, rbl_min, rbl_max, beta])
 
             # Convert model parameters to a tensor vector
-            params = pt.as_tensor_variable(params_list)
+            params_tensor = pt.as_tensor_variable(params_list)
             # Key step: Define the log-likelihood as an added potential
-            pm.Potential('likelihood', log_likelihood(params))
+            pm.Potential('likelihood', log_likelihood(params_tensor))
         return model
 
     def run(
