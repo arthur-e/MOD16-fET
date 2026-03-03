@@ -255,20 +255,22 @@ class SimultaneousStochasticSampler(AbstractSampler):
                 tmin_close = params[0]
                 tmin_open = params[1]
                 vpd_open = params[2]
+                g_cuticular = params[6]
+                rbl_max = params[9]
                 vpd_close =   pm.Uniform(
                     f'vpd_close{pft}', **repack(self.prior['vpd_close'], pft))
                 gl_sh =       pm.LogNormal(
                     f'gl_sh{pft}', **repack(self.prior['gl_sh'], pft))
                 gl_wv =       pm.LogNormal(
                     f'gl_wv{pft}', **repack(self.prior['gl_wv'], pft))
-                g_cuticular = pm.LogNormal(
-                    f'g_cuticular{pft}', **repack(self.prior['g_cuticular'], pft))
+                # g_cuticular = pm.LogNormal(
+                #     f'g_cuticular{pft}', **repack(self.prior['g_cuticular'], pft))
                 csl =         pm.LogNormal(
                     f'csl{pft}', **repack(self.prior['csl'], pft))
                 rbl_min =     pm.Triangular(
                     f'rbl_min{pft}', **repack(self.prior['rbl_min'], pft))
-                rbl_max =     pm.Triangular(
-                    f'rbl_max{pft}', **repack(self.prior['rbl_max'], pft))
+                # rbl_max =     pm.Triangular(
+                #     f'rbl_max{pft}', **repack(self.prior['rbl_max'], pft))
                 beta =        pm.Uniform(
                     f'beta{pft}', **repack(self.prior['beta'], pft))
                 params_list.extend([
