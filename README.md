@@ -33,6 +33,14 @@ python tests/tests.py
 The MOD16 library depends on the [MOD17 library.](https://github.com/arthur-e/MOD17)
 
 
+Implementation Details
+----------------------
+
+Unlike MOD16 or Boreal-ET, this implementation of MOD16 calibrates parameters for all plant functional types (PFTs) simultaneously. This slows down the MCMC sampler quite a bit. If the performance of the sampler is an issue, consider these alternate sampler tools that are compatible with `pymc`:
+
+- https://pymc-devs.github.io/nutpie/
+
+
 
 References
 --------------
