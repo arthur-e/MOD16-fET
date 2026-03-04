@@ -139,6 +139,122 @@ DRIVER_NAMES = (
 )
 
 
+class BlackBoxLikelihoodWithGradient(pt.Op):
+    '''
+    A custom operator that calculates the "likelihood" of model
+    parameters; it takes a vector of values (the parameters that define our
+    model) and returns a single "scalar" value (the log-likelihood).
+
+    Parameters
+    ----------
+    model : Callable
+        An arbitrary "black box" function that takes two arguments: the
+        model parameters ("params") and the forcing data ("x")
+    observed : numpy.ndarray
+        The "observed" data that our log-likelihood function takes in
+    x : numpy.ndarray or None
+        The forcing data (input drivers) that our model requires, or None
+        if no driver data are required
+    weights : Sequence or None
+        Optional sequence of weights applied to the model residuals (as in
+        weighted least squares)
+    objective : str
+        Name of the objective (or "loss") function to use, one of
+        ('rmsd', 'gaussian', 'kge'); defaults to "rmsd"
+    constraints : Sequence or None
+        Sequence of one or more Callables (function) that return a competing
+        value of the objective function (e.g., an RMSE). If there is more than
+        one Callable, they are each called and the largest value is retained.
+        If the (final) return value is greater than the value of the original
+        objective function, than that value is returned instead. This is a way
+        to tell the sampler that certain conditions are associated, e.g., with
+        very high RMSE. Each Callable should take one argument: a vector of
+        model predictions.
+    '''
+    itypes = [pt.dvector] # Expects a vector of parameter values when called
+    otypes = [pt.dscalar] # Outputs a single scalar value (the log likelihood)
+
+    def __init__(
+            self, model: Callable, observed: Sequence, x: Sequence = None,
+            weights: Sequence = None, objective: str = 'rmsd',
+            constraints: Sequence = None):
+        '''
+        Initialise the Op with various things that our log-likelihood function
+        requires. The observed data ("observed") and drivers ("x") must be
+        stored on the instance so the Theano Op can work seamlessly.
+        '''
+        self.model = model
+        self.observed = observed
+        self.x = x
+        self.weights = weights
+        self.constraints = constraints # NOTE: Not used
+        if objective.lower() in ('rmsd', 'rmse'):
+            self._loglik = self.loglik
+        else:
+            raise ValueError('Unknown "objective" function specified')
+
+    def loglik(
+            self, params: Sequence, observed: Sequence,
+            x: Sequence = None) -> Number:
+        '''
+        Pseudo-log likelihood, based on the root-mean squared deviation
+        (RMSD). The sign of the RMSD is forced to be negative so as to allow
+        for maximization of this objective function.
+
+        Parameters
+        ----------
+        params : Sequence
+            One or more model parameters
+        observed : Sequence
+            The observed values
+        x : Sequence or None
+            Input driver data
+
+        Returns
+        -------
+        Number
+            The (negative) root-mean squared deviation (RMSD) between the
+            predicted and observed values
+        '''
+        predicted = self.model(params, *x)
+        if self.weights is not None:
+            result = -np.sqrt(
+                np.nanmean(((predicted - observed) * self.weights) ** 2))
+        else:
+            result = -np.sqrt(np.nanmean(((predicted - observed)) ** 2))
+        return result
+
+    def grad(self, inputs, g):
+        # NEW!
+        # the method that calculates the gradients - it actually returns the vector-Jacobian product
+        # m, c, sigma, x, data = inputs
+        # inputs is just params
+
+        # Will need a separate gradient w.r.t each parameter
+        gradients = loglikegrad_op(params, self.x, self.observed)
+
+        # out_grad is a tensor of gradients of the Op outputs wrt to the function cost
+        [out_grad] = g
+        result = []
+        for grad_wrt_param in gradients:
+            result.append(pt.sum(out_grad * grad_wrt_param))
+        return result
+
+    def perform(self, node, inputs, outputs):
+        '''
+        The method that is used when calling the Op.
+
+        Parameters
+        ----------
+        node
+        inputs : Sequence
+        outputs : Sequence
+        '''
+        (params,) = inputs
+        logl = self._loglik(params, self.observed, self.x)
+        outputs[0][0] = np.array(logl) # Output the log-likelihood
+
+
 class SimultaneousStochasticSampler(AbstractSampler):
     '''
     A Markov Chain-Monte Carlo (MCMC) sampler for MOD16-fET. The
