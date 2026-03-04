@@ -257,7 +257,6 @@ class SimultaneousStochasticSampler(AbstractSampler):
                 vpd_open = params[2]
                 g_cuticular = params[6]
                 rbl_max = params[9]
-                beta = params[10]
                 vpd_close =   pm.Uniform(
                     f'vpd_close{pft}', **repack(self.prior['vpd_close'], pft))
                 gl_sh =       pm.LogNormal(
@@ -272,8 +271,8 @@ class SimultaneousStochasticSampler(AbstractSampler):
                     f'rbl_min{pft}', **repack(self.prior['rbl_min'], pft))
                 # rbl_max =     pm.Triangular(
                 #     f'rbl_max{pft}', **repack(self.prior['rbl_max'], pft))
-                # beta =        pm.Uniform(
-                #     f'beta{pft}', **repack(self.prior['beta'], pft))
+                beta =        pm.Uniform(
+                    f'beta{pft}', **repack(self.prior['beta'], pft))
                 params_list.extend([
                     tmin_close, tmin_open, vpd_open, vpd_close, gl_sh, gl_wv,
                     g_cuticular, csl, rbl_min, rbl_max, beta])
@@ -354,10 +353,11 @@ class SimultaneousStochasticSampler(AbstractSampler):
         with compiler(observed, drivers) as model:
             with warnings.catch_warnings():
                 warnings.simplefilter('ignore')
-                step_func = pm.DEMetropolisZ(tune = tune, scaling = scaling)
-                trace = pm.sample(
-                    draws = draws, step = step_func, cores = chains,
-                    chains = chains, idata_kwargs = {'log_likelihood': True})
+                # NOTE: Changing sampler
+                # step_func = pm.DEMetropolisZ(tune = tune, scaling = scaling)
+                trace = pm.sample_smc(
+                    draws = draws, cores = chains, chains = chains,
+                    idata_kwargs = {'log_likelihood': True})
             if self.backend is not None:
                 print('Writing results to file...')
                 trace.to_netcdf(self.backend)

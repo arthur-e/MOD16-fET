@@ -41,10 +41,10 @@ data:
     LWGNT: ["MERRA2/LWGNT", "MERRA2/LWGNT_daytime", "MERRA2/LWGNT_nighttime"] # (T x N)
 optimization:
   # The filename should have two "%s" formatting characters in it
-  backend: "/Stout1/MODIS_VIIRS/CONUS_30m_ET/calibration/backends/20260217_MOD16-fET_calibration.nc4"
+  backend: "/Stout1/MODIS_VIIRS/CONUS_30m_ET/calibration/backends/20260306_MOD16-fET_calibration.nc4"
   prior: "/usr/local/dev/MOD16-fET/mod16fet/data/MOD16_BPLUT_prior_20251113.yaml"
-  chains: 3
-  draws: 20000
+  chains: 1
+  draws: 200
   tune: scaling
   scaling: 0.001
   objective: RMSD # Use nRMSD if there are "constraints"
