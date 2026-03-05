@@ -435,7 +435,7 @@ class CalibrationAPI(object):
             if blacklist is not None:
                 if len(blacklist) > 0:
                     blacklist = np.array(blacklist)
-                    site_mask = (~np.in1d(sites, blacklist))
+                    site_mask = (~np.isin(sites, blacklist))
 
             # Get tower weights, for when towers are too close together
             weights = hdf['weights'][:]
@@ -451,7 +451,7 @@ class CalibrationAPI(object):
             year_idx = (time[:,0] - time[:,0].min())
             new_pft_map = []
             for idx in np.unique(year_idx):
-                n_repeats = np.in1d(year_idx, idx).sum()
+                n_repeats = np.isin(year_idx, idx).sum()
                 new_pft_map.append(
                     pft_map[:,idx][:,np.newaxis].repeat(n_repeats, axis = 1))
             pft_map = np.concatenate(new_pft_map, axis = 1)

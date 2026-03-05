@@ -7,7 +7,7 @@ name = "mod16fet"
 authors = [
     {name = "K. Arthur Endsley", email = "arthur.endsley@ntsg.umt.edu"}
 ]
-description = "Python tools for MOD16 algorithm"
+description = "Python tools for MOD16-fET algorithm"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {file = "LICENSE"}
@@ -40,4 +40,24 @@ version = {attr = "mod16fet.__version__"}
 [project.optional-dependencies]
 docs = ["pdoc3>=0.9.2"]
 sensitivity = ["SALib>=1.4.5"]
-calibration = ["pymc >=5.10.0, <=5.12.0", "pytensor>=2.18.0", "arviz>=0.13.0"]
+# calibration = ["pymc >=5.10.0, <=5.12.0", "pytensor>=2.18.0", "arviz>=0.13.0"]
+calibration = ["pymc >=5.10.0", "pytensor>=2.18.0", "arviz>=0.13.0"]
+
+[tool.pixi.workspace]
+channels = ["conda-forge"]
+platforms = ["linux-64"]
+
+[tool.pixi.pypi-dependencies]
+mod16fet = { path = ".", editable = true }
+
+[tool.pixi.environments]
+default = { solve-group = "default" }
+calibration = { features = ["calibration"], solve-group = "default" }
+docs = { features = ["docs"], solve-group = "default" }
+sensitivity = { features = ["sensitivity"], solve-group = "default" }
+
+[tool.pixi.tasks]
+
+[tool.pixi.dependencies]
+python = "3.13.*"
+pymc = "==5.28.1"
