@@ -78,9 +78,9 @@ class MOD16_FET(object):
 
     @staticmethod
     def _et(
-            parameters, pft_map, lw_net, lw_net_day, lw_net_night, sw_rad, sw_rad_day,
-            sw_albedo, tmean, tmin, tmax, vpd, rhumidity, pressure, fpar,
-            lai, f_wet = None, tiny = 1e-7, r_corr = None
+            parameters, pft_map, lw_net, sw_rad, sw_albedo, tmean, tmin, tmax,
+            vpd, rhumidity, pressure, fpar, lai, f_wet = None,
+            tiny = 1e-7, r_corr = None
         ) -> Number:
         '''
         Optimized ET code, intended for use in model calibration ONLY.
@@ -106,17 +106,17 @@ class MOD16_FET(object):
             The total latent heat flux [W m-2] for each site/pixel
         '''
         et = MOD16_FET._evapotranspiration(
-            parameters, lw_net, lw_net_day, lw_net_night, sw_rad, sw_rad_day,
-            sw_albedo, tmean, tmin, tmax, vpd, rhumidity, pressure, fpar,
-            lai, f_wet = None, tiny = 1e-7, r_corr = r_corr)
+            parameters, lw_net, sw_rad, sw_albedo, tmean, tmin, tmax,
+            vpd, rhumidity, pressure, fpar, lai, f_wet = None,
+            tiny = 1e-7, r_corr = r_corr)
         # Return the weighted sum of ET
         return np.nansum(et * pft_map, axis = 0)
 
     @staticmethod
     def _evapotranspiration(
-            parameters, lw_net, lw_net_day, lw_net_night, sw_rad, sw_rad_day,
-            sw_albedo, tmean, tmin, tmax, vpd, rhumidity, pressure, fpar,
-            lai, f_wet = None, tiny = 1e-7, r_corr = None
+            parameters, lw_net, sw_rad, sw_albedo, tmean, tmin, tmax,
+            vpd, rhumidity, pressure, fpar, lai, f_wet = None,
+            tiny = 1e-7, r_corr = None
         ) -> Number:
         '''
         Optimized ET code, intended for use in model calibration ONLY. The
@@ -145,9 +145,8 @@ class MOD16_FET(object):
         # Net radiation to surface, based on down-welling short-wave
         #   radiation and net long-wave radiation
         rad_net = sw_rad * (1 - sw_albedo) + lw_net
-        rad_net_day = sw_rad_day * (1 - sw_albedo) + lw_net_day
         # Ground heat flux
-        g_soil = MOD16_FET.ground_heat_flux(rad_net_day, lw_net_night, tmin, tmax)
+        g_soil = MOD16_FET.ground_heat_flux(rad_net, tmin, tmax)
         # Radiation received by the soil, see Section 2.2 of User Guide
         rad_soil = (1 - fpar) * (rad_net - g_soil)
         # Radiation intercepted by the canopy
@@ -333,10 +332,7 @@ class MOD16_FET(object):
         return STD_PRESSURE_PASCALS * np.power(temp_ratio, AIR_PRESSURE_RATE)
 
     @staticmethod
-    def ground_heat_flux(
-            rad_net_day: Number, lw_net_night: Number,
-            tmin: Number, tmax: Number
-        ) -> Iterable[Tuple[Sequence, Sequence]]:
+    def ground_heat_flux(rad_net: Number, tmin: Number, tmax: Number) -> Number:
         r'''
         Ground heat flux [MJ m-2], based on Santanello & Friedl (2002):
 
@@ -344,28 +340,10 @@ class MOD16_FET(object):
         \text{max}\left(\frac{G}{A}\right) = 0.0074\,\Delta T + 0.088
         $$
 
-        The ratio is the same for night or day, but we compute a total daily
-        $G$ as the sum of separate day and night quantities:
-
-        $$
-        G_{\text{day}} = (G^*/A) \times \left(R_S(1 - \alpha) +
-            R_{L,\text{day}}\right)
-        $$
-        $$
-        G_{\text{night}} = (G^*/A) \times R_{L,\text{night}}
-        $$
-        $$
-        G = G_{\text{day}} + G_{\text{night}}
-        $$
-
         Parameters
         ----------
-        rad_net_day : int or float or numpy.ndarray
-            Net radiation received at the earth's sruface during daytime hours;
-            i.e., integrated while the sun is up, (J m-2 s-1) or (W m-2)
-        lw_net_night : int or float or numpy.ndarray
-            Net downward long-wave radiation during nighttime hours; i.e.,
-            integrated while the sun is down, (J m-2 s-1) or (W m-2)
+        rad_net : int or float or numpy.ndarray
+            Net radiation received at the earth's surface (J m-2 s-1) or (W m-2)
         tmin : int or float or numpy.ndarray
             Minimum daily temperature (degrees K)
         tmax : int or float or numpy.ndarray
@@ -376,9 +354,7 @@ class MOD16_FET(object):
         Number or numpy.ndarray
         '''
         ratio = 0.0074 * (tmax - tmin) + 0.088
-        g_day = ratio * rad_net_day # i.e., SW and LW radiation during the day
-        g_night = ratio * lw_net_night
-        return g_day + g_night
+        return ratio * rad_net
 
     @staticmethod
     def rhumidity(temp_k: Number, vpd: Number) -> Number:

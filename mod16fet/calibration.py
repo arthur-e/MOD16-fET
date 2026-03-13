@@ -61,15 +61,14 @@ surrounding a tower:
       *latent_heat      -- (T x N) Observed latent heat flux [W m-2]
       validation_mask   -- (L x T x N) Indicates what site-days are reserved
 
+    *ERA5/
+      *LWGNT            -- (T x N) Net long-wave radiation, 24-hr mean [W m-2]
+      *SWGDN            -- (T x N) Down-welling short-wave radiation [W m-2]
+
     *Gridmet/
-      LWGNT             -- (T x N) Net long-wave radiation, 24-hr mean [W m-2]
-      LWGNT_daytime     -- (T x N) ... for daytime hours only
-      LWGNT_nighttime   -- (T x N) ... for nighttime hours only
-      SWGDN             -- (T x N) Down-welling short-wave radiation [W m-2]
-      SWGDN_daytime     -- (T x N) ... for daytime hours only
-      Tmin              -- (T x N) Daily minimum air temperature [deg K]
-      Tmax              -- (T x N) Daily maximum air temperature [deg K]
-      Tmean             -- (T x N) Daily average air temperature [deg K]
+      *Tmin             -- (T x N) Daily minimum air temperature [deg K]
+      *Tmax             -- (T x N) Daily maximum air temperature [deg K]
+      *Tmean            -- (T x N) Daily average air temperature [deg K]
 
     *MODIS/
       *MCD43GF_black_sky_sw_albedo
@@ -133,9 +132,8 @@ from mod16fet.utils import restore_bplut, pft_dominant, flatten_params_dict
 
 MOD16_DIR = os.path.dirname(mod16fet.__file__)
 DRIVER_NAMES = (
-    'pft_map', 'lw_net', 'lw_net_day', 'lw_net_night', 'sw_rad', 'sw_rad_day',
-    'sw_albedo', 'tmean', 'tmin', 'tmax', 'vpd', 'rhumidity', 'pressure',
-    'fpar', 'lai'
+    'pft_map', 'lw_net', 'sw_rad', 'sw_albedo', 'tmean', 'tmin', 'tmax', 'vpd',
+    'rhumidity', 'pressure', 'fpar', 'lai'
 )
 
 
@@ -477,11 +475,8 @@ class CalibrationAPI(object):
             if exceptions is not None:
                 lookup.update(exceptions)
 
-            lw_net = hdf[lookup['LWGNT'][0]][t0:][:,site_mask]
-            lw_net_day = hdf[lookup['LWGNT'][1]][t0:][:,site_mask]
-            lw_net_night = hdf[lookup['LWGNT'][2]][t0:][:,site_mask]
-            sw_rad = hdf[lookup['SWGDN'][0]][t0:][:,site_mask]
-            sw_rad_day = hdf[lookup['SWGDN'][1]][t0:][:,site_mask]
+            lw_net = hdf[lookup['LWGNT']][t0:][:,site_mask]
+            sw_rad = hdf[lookup['SWGDN']][t0:][:,site_mask]
             sw_albedo = hdf[lookup['albedo']][t0:][:,site_mask]
             tmean = hdf[lookup['Tmean']][t0:][:,site_mask]
             tmax = hdf[lookup['Tmax']][t0:][:,site_mask]
@@ -517,8 +512,8 @@ class CalibrationAPI(object):
                 lai = np.nanmean(lai, axis = -1)
 
         drivers = dict(zip(DRIVER_NAMES, [
-            pft_map, lw_net, lw_net_day, lw_net_night, sw_rad, sw_rad_day,
-            sw_albedo, tmean, tmin, tmax, vpd, rhumidity, pressure, fpar, lai]))
+            pft_map, lw_net, sw_rad, sw_albedo, tmean, tmin, tmax, vpd,
+            rhumidity, pressure, fpar, lai]))
         # Clean the tower observations
         tower_obs = self.clean_observed(tower_obs)
         return (tower_obs, drivers, weights)

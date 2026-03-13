@@ -36,9 +36,8 @@ data:
     Tmean: "Gridmet/Tmean" # (T x N)
     Tmax: "Gridmet/Tmax" # (T x N)
     VPD: "Gridmet/VPD" # Mean annual temperature (T x N)
-    # Should be lists of [24-hour, daytime, nighttime] field names
-    SWGDN: ["MERRA2/SWGDN", "MERRA2/SWGDN_daytime", ~] # No nighttime SWGDN
-    LWGNT: ["MERRA2/LWGNT", "MERRA2/LWGNT_daytime", "MERRA2/LWGNT_nighttime"] # (T x N)
+    SWGDN: "ERA5/sw_rad_24hr" # Downwelling short-wave radiation [W m-2]
+    LWGNT: "ERA5/lw_net_24hr" # Net long-wave radiation [W m-2]
 optimization:
   # The filename should have two "%s" formatting characters in it
   backend: "/Stout1/MODIS_VIIRS/CONUS_30m_ET/calibration/backends/20260307_MOD16-fET_calibration.nc4"
