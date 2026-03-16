@@ -40,7 +40,7 @@ data:
     LWGNT: "ERA5/lw_net_24hr" # Net long-wave radiation [W m-2]
 optimization:
   # The filename should have two "%s" formatting characters in it
-  backend: "/Stout1/MODIS_VIIRS/CONUS_30m_ET/calibration/backends/20260307_MOD16-fET_calibration.nc4"
+  backend: "/Stout1/MODIS_VIIRS/CONUS_30m_ET/calibration/backends/20260317_MOD16-fET_calibration.nc4"
   prior: "/usr/local/dev/MOD16-fET/mod16fet/data/MOD16_BPLUT_prior_20251113.yaml"
   chains: 4
   draws: 200
