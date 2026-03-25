@@ -31,7 +31,6 @@ eliminate autocorrelation, e.g., from the command line:
     python calibration.py plot-autocorr --pft=1 --burn=1000 --thin=10
 
 Or in Python (use `--ipdb` to get an interactive session):
-
     # sampler is already available if you used --ipdb, otherwise:
     sampler = MOD16StochasticSampler(...)
     sampler.plot_autocorr(burn = 1000, thin = 10)
@@ -255,6 +254,7 @@ class SimultaneousStochasticSampler(AbstractSampler):
                 vpd_open = params[2]
                 g_cuticular = params[6]
                 rbl_max = params[9]
+                beta = params[10]
                 vpd_close =   pm.Uniform(
                     f'vpd_close{pft}', **repack(self.prior['vpd_close'], pft))
                 gl_sh =       pm.LogNormal(
@@ -265,8 +265,6 @@ class SimultaneousStochasticSampler(AbstractSampler):
                     f'csl{pft}', **repack(self.prior['csl'], pft))
                 rbl_min =     pm.Triangular(
                     f'rbl_min{pft}', **repack(self.prior['rbl_min'], pft))
-                beta =        pm.Uniform(
-                    f'beta{pft}', **repack(self.prior['beta'], pft))
                 params_list.extend([
                     tmin_close, tmin_open, vpd_open, vpd_close, gl_sh, gl_wv,
                     g_cuticular, csl, rbl_min, rbl_max, beta])
@@ -399,7 +397,7 @@ class CalibrationAPI(object):
                 lambda x: signal.filtfilt(window, np.ones(1), x), 0, raw)
         return raw # Or, revert to the raw data
 
-    def _load_data(self, exceptions: dict = None):
+    def _load_data(self, exceptions: dict = None, use_blacklist = True):
         'Read in driver datasets from the HDF5 file, structured by years'
         constraints = dict()
         with h5py.File(self.hdf5, 'r') as hdf:
@@ -426,7 +424,8 @@ class CalibrationAPI(object):
             pft_map = hdf[self.config['data']['class_map']]
             # Also, ensure the blacklist matches the shape of this mask;
             #   i.e., blacklisted sites should NEVER be used
-            if blacklist is not None:
+            site_mask = np.ones((len(sites),), dtype = np.bool) # Defaults to all
+            if blacklist is not None and use_blacklist:
                 if len(blacklist) > 0:
                     blacklist = np.array(blacklist)
                     site_mask = (~np.isin(sites, blacklist))
