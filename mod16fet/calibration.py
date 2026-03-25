@@ -363,7 +363,7 @@ class SimultaneousStochasticSampler(AbstractSampler):
                 pyplot.show()
 
 
-class CalibrationAPI(object):
+class SimultaneousCalibrationAPI(object):
     '''
     Convenience class for calibrating the MOD16 ET model. Meant to be used
     at the command line, in combination with the option to specify a
@@ -670,6 +670,7 @@ class CalibrationAPI(object):
         for key in ('chains', 'draws', 'tune', 'scaling'):
             if key in self.config['optimization'].keys():
                 kwargs[key] = self.config['optimization'][key]
+
         # Load the params dict
         params_dict = restore_bplut(self.config['BPLUT']['ET'])
         # NOTE: This value was hard-coded in the extant version of MOD16
@@ -679,13 +680,13 @@ class CalibrationAPI(object):
         params_vector = flatten_params_dict(params_dict)
 
         # Load the data
-        tower_obs, drivers, weights, constr = self._load_data()
+        tower_obs, drivers, weights = self._load_data()
 
         print('Initializing sampler...')
         backend = self.config['optimization']['backend']
-        sampler = MOD16StochasticSampler(
-            self.config, mod16fet._et, params_dict, backend = backend,
-            weights = weights, constraints = constraints)
+        sampler = SimultaneousStochasticSampler(
+            self.config, MOD16_FET._et, params_vector, backend = backend,
+            weights = weights)
 
         # Either: Enter diagnostic mode or run the sampler
         if plot_trace or ipdb:
@@ -695,46 +696,19 @@ class CalibrationAPI(object):
             if ipdb:
                 import ipdb
                 ipdb.set_trace()#FIXME
-            az.plot_trace(trace, var_names = mod16fet.required_parameters)
+            az.plot_trace(trace, var_names = MOD16_FET.required_parameters)
             pyplot.show()
             return
 
         # Get (informative) priors for just those parameters that have them
         with open(self.config['optimization']['prior'], 'r') as file:
             prior = yaml.safe_load(file)
-        prior_params = list(filter(
-            lambda p: p in prior.keys(), sampler.required_parameters['ET']))
-        prior = dict([
-            (p, dict([(k, v[pft]) for k, v in prior[p].items()]))
-            for p in prior_params
-        ])
-
-        # Determine whether any parameters are fixed
-        fixed = []
-        for name in mod16fet.required_parameters:
-            if self.config['optimization']['fixed'] is None:
-                break
-            if name in self.config['optimization']['fixed'].keys():
-                fixed.append(
-                    (name, self.config['optimization']['fixed'][name][pft]))
-        fixed = dict(fixed)
-
-        # Set var_names to tell ArviZ to plot only the free parameters; i.e.,
-        #   those with priors and which are not fixed
-        var_names = list(filter(
-            lambda x: x in prior.keys(), mod16fet.required_parameters))
-        # Remove any random variables that have fixed values from the list
-        #   of variables to be plotted
-        for key in fixed.keys():
-            if fixed[key] is not None and key in var_names:
-                var_names.remove(key)
-        kwargs.update({'var_names': var_names})
 
         # TODO Someday, MOD17 will be updated to allow "drivers" to be a
         #   dictionary instead of a sequence; until then: drivers.values()
+        drivers = [drivers[key] for key in DRIVER_NAMES]
         sampler.run( # Only show the trace plot if not using k-folds
-            tower_obs, drivers.values(), prior = prior, fixed = fixed,
-            save_fig = save_fig, show_fig = (k_folds == 1), **kwargs)
+            tower_obs, drivers, prior = prior, save_fig = save_fig, **kwargs)
 
 
 if __name__ == '__main__':
