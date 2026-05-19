@@ -253,11 +253,6 @@ class SimultaneousStochasticSampler(AbstractSampler):
                 g_cuticular, csl, rbl_min, rbl_max, beta
             ]
             # Convert model parameters to a tensor vector
-            params = pt.as_tensor_variable(params_list)
-            # Key step: Define the log-likelihood as an added potential
-            pm.Potential('likelihood', log_likelihood(params))
-
-            # Convert model parameters to a tensor vector
             params_tensor = pt.as_tensor_variable(params_list)
             # Key step: Define the log-likelihood as an added potential
             pm.Potential('likelihood', log_likelihood(params_tensor))
@@ -316,7 +311,8 @@ class SimultaneousStochasticSampler(AbstractSampler):
         assert tune in ('lambda', 'scaling') or tune is None
         self.prior.update(prior) # Update prior assumptions
         # Generate an initial goodness-of-fit score
-        predicted = self.model(self.params, *drivers)
+        params = [self.params[k] for k in MOD16_FET.required_parameters]
+        predicted = self.model(params, *drivers)
         if self.weights is not None:
             score = np.sqrt(
                 np.nanmean(((predicted - observed) * self.weights) ** 2))
@@ -459,7 +455,6 @@ class CalibrationAPI(object):
             #   along the time axis
             if weights.ndim == 1:
                 weights = weights[None,...].repeat(nsteps, axis = 0)
-            weights = weights[pft_mask]
 
             # Read in tower observations; we select obs of interest in three
             #   steps because we want *only* matching tower-day observations
@@ -474,6 +469,8 @@ class CalibrationAPI(object):
             #   no need to slow down the sampler with predictions that will be
             #   NaN due to missing data
             mask = np.logical_and(pft_mask, ~np.isnan(tower_obs))
+            tower_obs = tower_obs[mask]
+            weights = weights[mask]
 
             # Read in driver datasets
             print('Loading driver datasets...')
@@ -587,7 +584,7 @@ class CalibrationAPI(object):
                     backend = backend[:backend.rfind('.')] + f'-k{fold}' + backend[backend.rfind('.'):]
                 # NOTE: This value was hard-coded in the extant version of MOD16
                 if 'beta' not in params:
-                    params['beta'] = 250
+                    params['beta'] = 250.0
                 sampler = MOD16StochasticSampler(
                     self.config, getattr(MOD16, '_%s' % model.lower()), params,
                     backend = backend)
@@ -687,8 +684,8 @@ class CalibrationAPI(object):
         # NOTE: This value was hard-coded in the extant version of MOD16
         if np.isnan(params_dict['beta']).all():
             params_dict['beta'] = 250
-        # Convert to the vectorized form expected in the new model
-        params_vector = flatten_params_dict(params_dict)
+        # NOTE: In the updated calibration scheme, each PFT is treated separately
+        params_dict = dict([(k, v[pft]) for k, v in params_dict.items()])
 
         # Load the data
         tower_obs, drivers, weights = self._load_data(pft)
@@ -696,7 +693,7 @@ class CalibrationAPI(object):
         print('Initializing sampler...')
         backend = self.config['optimization']['backend']
         sampler = SimultaneousStochasticSampler(
-            self.config, MOD16_FET._et, params_vector, backend = backend,
+            self.config, MOD16_FET._et, params_dict, backend = backend,
             weights = weights)
 
         # Either: Enter diagnostic mode or run the sampler
@@ -714,6 +711,12 @@ class CalibrationAPI(object):
         # Get (informative) priors for just those parameters that have them
         with open(self.config['optimization']['prior'], 'r') as file:
             prior = yaml.safe_load(file)
+        prior_params = list(filter(
+            lambda p: p in prior.keys(), sampler.required_parameters['ET']))
+        prior = dict([
+            (p, dict([(k, v[pft]) for k, v in prior[p].items()]))
+            for p in prior_params
+        ])
 
         # TODO Someday, MOD17 will be updated to allow "drivers" to be a
         #   dictionary instead of a sequence; until then: drivers.values()

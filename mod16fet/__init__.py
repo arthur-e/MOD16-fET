@@ -78,6 +78,39 @@ class MOD16_FET(object):
 
     @staticmethod
     def _et(
+            parameters, lw_net, sw_rad, sw_albedo, tmean, tmin, tmax,
+            vpd, rhumidity, pressure, fpar, lai, f_wet = None,
+            tiny = 1e-7, r_corr = None
+        ) -> Number:
+        '''
+        Optimized ET code, intended for use in model calibration ONLY.
+        Returns total ET, not fractional ET.
+
+        Parameters
+        ----------
+        parameters : Sequence
+            A list of numbers, or arrays, each array representing a different
+            parameter, in the order specified by
+            `MOD16_FET.required_parameters`. Each array
+            should be a (1 x N) array, where N is the number of sites/pixels.
+        *drivers
+            Every subsequent argument is a separate 1D array for vectorized run
+
+        Returns
+        -------
+        numpy.ndarray
+            The total latent heat flux [W m-2] for each site/pixel
+        '''
+        # NOTE: For calibration, PFTs are done separately, hence n_pft = 1
+        et = MOD16_FET._evapotranspiration(
+            parameters, lw_net, sw_rad, sw_albedo, tmean, tmin, tmax,
+            vpd, rhumidity, pressure, fpar, lai, f_wet = None,
+            tiny = 1e-7, r_corr = r_corr, n_pft = 1)
+        # Return ET for a (single) PFT
+        return et[0]
+
+    @staticmethod
+    def _et_fractional(
             parameters, pft_map, lw_net, sw_rad, sw_albedo, tmean, tmin, tmax,
             vpd, rhumidity, pressure, fpar, lai, f_wet = None,
             tiny = 1e-7, r_corr = None
@@ -116,7 +149,7 @@ class MOD16_FET(object):
     def _evapotranspiration(
             parameters, lw_net, sw_rad, sw_albedo, tmean, tmin, tmax,
             vpd, rhumidity, pressure, fpar, lai, f_wet = None,
-            tiny = 1e-7, r_corr = None
+            tiny = 1e-7, r_corr = None, n_pft = None
         ) -> Number:
         '''
         Optimized ET code, intended for use in model calibration ONLY. The
@@ -135,6 +168,14 @@ class MOD16_FET(object):
         *drivers
             Every subsequent argument is a separate (T x N) where T is the
             number of time steps and N is the number of sites/pixels.
+        tiny : Number
+            The numeric floor, i.e., numbers less than `tiny` are considered
+            to be zero (Optional) (Default: `1e-7`)
+        r_corr : Number
+            The correction factor, in case this is pre-computed (Optional)
+        n_pft : int
+            The number of PFTs present that should be considered; defaults to
+            `None` in which case all possible PFTs are considered
 
         Returns
         -------
@@ -176,7 +217,8 @@ class MOD16_FET(object):
         transpiration = list()
         et_total = list()
         n_params = len(MOD16_FET.required_parameters)
-        n_pft = len(PFT_VALID)
+        if n_pft is None:
+            n_pft = len(PFT_VALID)
         # Get the start, end indices of the parameters for each PFT
         starts = np.arange(0, n_params * n_pft, n_params)
         for i0, i1 in zip(starts, starts + n_params):
