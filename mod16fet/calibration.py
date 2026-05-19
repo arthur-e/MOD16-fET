@@ -131,7 +131,7 @@ from mod16fet.utils import restore_bplut, pft_dominant, flatten_params_dict
 
 MOD16_DIR = os.path.dirname(mod16fet.__file__)
 DRIVER_NAMES = (
-    'pft_map', 'lw_net', 'sw_rad', 'sw_albedo', 'tmean', 'tmin', 'tmax', 'vpd',
+    'lw_net', 'sw_rad', 'sw_albedo', 'tmean', 'tmin', 'tmax', 'vpd',
     'rhumidity', 'pressure', 'fpar', 'lai'
 )
 
@@ -230,44 +230,32 @@ class SimultaneousStochasticSampler(AbstractSampler):
             self.model, observed, x = drivers, weights = self.weights,
             objective = self.config['optimization']['objective'],
             constraints = self.constraints)
-        # Prepare to add parameters for each PFT
-        n_params = len(MOD16_FET.required_parameters)
-        n_pft = len(PFT_VALID)
-        # Get the start, end indices of the parameters for each PFT
-        starts = np.arange(0, n_params * n_pft, n_params)
         # With this context manager, "all PyMC3 objects introduced in the indented
         #   code block...are added to the model behind the scenes."
         with pm.Model() as model:
-            params_list = []
+            # NOTE: Parameters shared with MOD17 are fixed based on MOD17
+            #   re-calibration
+            tmin_close = self.params['tmin_close']
+            tmin_open = self.params['tmin_open']
+            vpd_open = self.params['vpd_open']
+            vpd_close =   pm.Uniform('vpd_close', **self.prior['vpd_close'])
+            gl_sh =       pm.LogNormal('gl_sh', **self.prior['gl_sh'])
+            gl_wv =       pm.LogNormal('gl_wv', **self.prior['gl_wv'])
+            g_cuticular = pm.LogNormal(
+                'g_cuticular', **self.prior['g_cuticular'])
+            csl =         pm.LogNormal('csl', **self.prior['csl'])
+            rbl_min =     pm.Triangular('rbl_min', **self.prior['rbl_min'])
+            rbl_max =     pm.Triangular('rbl_max', **self.prior['rbl_max'])
+            beta =        pm.Uniform('beta', **self.prior['beta'])
             # (Stochstic) Priors for unknown model parameters
-            for j, idx in enumerate(zip(starts, starts + n_params)):
-                i0, i1 = idx
-                pft = PFT_VALID[j] # Just in case PFT codes start at int > 0
-                # NOTE: Getting the parameters for *this* PFT class;
-                #   params[i] below will refer to the ith parameter of the
-                #   MOD16_FET.required_parameters vector
-                params = self.params[i0:i1]
-                # NOTE: tmin_close, tmin_open, and vpd_open are just copied from
-                #   the original parameters table
-                tmin_close = params[0]
-                tmin_open = params[1]
-                vpd_open = params[2]
-                g_cuticular = params[6]
-                rbl_max = params[9]
-                beta = params[10]
-                vpd_close =   pm.Uniform(
-                    f'vpd_close{pft}', **repack(self.prior['vpd_close'], pft))
-                gl_sh =       pm.LogNormal(
-                    f'gl_sh{pft}', **repack(self.prior['gl_sh'], pft))
-                gl_wv =       pm.LogNormal(
-                    f'gl_wv{pft}', **repack(self.prior['gl_wv'], pft))
-                csl =         pm.LogNormal(
-                    f'csl{pft}', **repack(self.prior['csl'], pft))
-                rbl_min =     pm.Triangular(
-                    f'rbl_min{pft}', **repack(self.prior['rbl_min'], pft))
-                params_list.extend([
-                    tmin_close, tmin_open, vpd_open, vpd_close, gl_sh, gl_wv,
-                    g_cuticular, csl, rbl_min, rbl_max, beta])
+            params_list = [
+                tmin_close, tmin_open, vpd_open, vpd_close, gl_sh, gl_wv,
+                g_cuticular, csl, rbl_min, rbl_max, beta
+            ]
+            # Convert model parameters to a tensor vector
+            params = pt.as_tensor_variable(params_list)
+            # Key step: Define the log-likelihood as an added potential
+            pm.Potential('likelihood', log_likelihood(params))
 
             # Convert model parameters to a tensor vector
             params_tensor = pt.as_tensor_variable(params_list)
@@ -363,7 +351,7 @@ class SimultaneousStochasticSampler(AbstractSampler):
                 pyplot.show()
 
 
-class SimultaneousCalibrationAPI(object):
+class CalibrationAPI(object):
     '''
     Convenience class for calibrating the MOD16 ET model. Meant to be used
     at the command line, in combination with the option to specify a
@@ -397,7 +385,7 @@ class SimultaneousCalibrationAPI(object):
                 lambda x: signal.filtfilt(window, np.ones(1), x), 0, raw)
         return raw # Or, revert to the raw data
 
-    def _load_data(self, exceptions: dict = None, use_blacklist = True):
+    def _load_data(self, pft: int, exceptions: dict = None, use_blacklist = True):
         'Read in driver datasets from the HDF5 file, structured by years'
         constraints = dict()
         with h5py.File(self.hdf5, 'r') as hdf:
@@ -417,18 +405,53 @@ class SimultaneousCalibrationAPI(object):
                             time[:,1] == ds.month),
                         time[:,2] == ds.day)).ravel()[0])
             # Number of time steps
-            nsteps = time.shape[0]
+            nsteps = time[t0:].shape[0]
             # In case some tower sites should not be used
             blacklist = self.config['data']['sites_blacklisted']
 
-            pft_map = hdf[self.config['data']['class_map']]
+            pft_array = hdf[self.config['data']['class_map']][:]
             # Also, ensure the blacklist matches the shape of this mask;
             #   i.e., blacklisted sites should NEVER be used
-            site_mask = np.ones((len(sites),), dtype = np.bool) # Defaults to all
             if blacklist is not None and use_blacklist:
                 if len(blacklist) > 0:
                     blacklist = np.array(blacklist)
-                    site_mask = (~np.isin(sites, blacklist))
+
+            years = np.array([
+                datetime.date(*ymd).year for ymd in time[:].tolist()
+            ])
+            if pft_array.shape[0] != years.size:
+                print('WARNING: First axis of class_map does not match the length of the "time" vector; reshaping to fit')
+                pft_map = pft_array[years - years.min()]
+
+            # If any days of this year correspond to the current PFT, select
+            #   that year for calibration
+            year_masks = []
+            valid = self.config['data']['classes'] # Valid PFT classes
+            for y in list(np.unique(years)):
+                # NOTE: This is where we select the current year
+                pft_map_now = pft_map[years == y].swapaxes(0,1)
+                pft_map_now = pft_map_now.reshape(
+                    (pft_map_now.shape[0], pft_map_now.size // pft_map_now.shape[0]))
+                # Update the PFT map (this year) to handle invalid PFT classes
+                for i in range(pft_map_now.shape[0]):
+                    if not np.in1d(pft_map_now[i], valid).all():
+                        # Replace invalid PFTs (this year) with most common
+                        #   valid PFT
+                        potential = pft_map_now[i,np.in1d(pft_map_now[i], valid)]
+                        if potential.size == 0:
+                            continue # Skip this for now
+                        pft_map_now[i,~np.in1d(pft_map_now[i], valid)] =\
+                            mode(potential)
+                # Now, with (mostly) good PFTs (this year), find the dominant
+                pft_map_now = np.apply_along_axis(mode, 1, pft_map_now)
+                year_masks.append(pft_map_now == pft)
+
+            # Re-stack the annual PFT masks, subset to time period of interest
+            year_masks = np.stack(year_masks, axis = 0)
+            pft_mask = year_masks[years - years.min()][t0:]
+            # Set as False any tower-days where the tower is blacklisted
+            if blacklist is not None:
+                pft_mask[:,np.in1d(sites, blacklist)] = False
 
             # Get tower weights, for when towers are too close together
             weights = hdf['weights'][:]
@@ -436,31 +459,21 @@ class SimultaneousCalibrationAPI(object):
             #   along the time axis
             if weights.ndim == 1:
                 weights = weights[None,...].repeat(nsteps, axis = 0)
-            weights = weights[t0:,site_mask]
-
-            # Get a (P x T x N) array of PFT fractions; there's a much easier
-            #   way to do this with indexing that *used* to work but no longer:
-            #   pft_map = pft_map[:,(time[:,0] - time[:,0].min())]
-            year_idx = (time[:,0] - time[:,0].min())
-            new_pft_map = []
-            for idx in np.unique(year_idx):
-                n_repeats = np.isin(year_idx, idx).sum()
-                new_pft_map.append(
-                    pft_map[:,idx][:,np.newaxis].repeat(n_repeats, axis = 1))
-            pft_map = np.concatenate(new_pft_map, axis = 1)
-            pft_map = pft_map[:,t0:]
-            # Subset to just those sites we'll be using
-            pft_map = pft_map[...,site_mask]
-
-            # After subsetting the PFT map, time now starts at this start date
-            time = time[t0:]
+            weights = weights[pft_mask]
 
             # Read in tower observations; we select obs of interest in three
             #   steps because we want *only* matching tower-day observations
             #   but we'll want driver data for a full year if that year
             #   contains *any* matching tower-day observations
             print('Masking out validation data...')
-            tower_obs = hdf[self.config['data']['target_observable']][t0:,site_mask]
+            tower_obs = hdf[self.config['data']['target_observable']][t0:]
+            # Clean the tower observations
+            tower_obs = self.clean_observed(tower_obs)
+
+            # NOTE: Getting a new mask, based on tower data availability; there's
+            #   no need to slow down the sampler with predictions that will be
+            #   NaN due to missing data
+            mask = np.logical_and(pft_mask, ~np.isnan(tower_obs))
 
             # Read in driver datasets
             print('Loading driver datasets...')
@@ -470,13 +483,13 @@ class SimultaneousCalibrationAPI(object):
             if exceptions is not None:
                 lookup.update(exceptions)
 
-            lw_net = hdf[lookup['LWGNT']][t0:][:,site_mask]
-            sw_rad = hdf[lookup['SWGDN']][t0:][:,site_mask]
-            sw_albedo = hdf[lookup['albedo']][t0:][:,site_mask]
-            tmean = hdf[lookup['Tmean']][t0:][:,site_mask]
-            tmax = hdf[lookup['Tmax']][t0:][:,site_mask]
-            tmin = hdf[lookup['Tmin']][t0:][:,site_mask]
-            vpd = hdf[lookup['VPD']][t0:][:,site_mask]
+            lw_net = hdf[lookup['LWGNT']][t0:][mask]
+            sw_rad = hdf[lookup['SWGDN']][t0:][mask]
+            sw_albedo = hdf[lookup['albedo']][t0:][mask]
+            tmean = hdf[lookup['Tmean']][t0:][mask]
+            tmax = hdf[lookup['Tmax']][t0:][mask]
+            tmin = hdf[lookup['Tmin']][t0:][mask]
+            vpd = hdf[lookup['VPD']][t0:][mask]
             if tmin.min() < 0 or tmin.max() < 100:
                 print("WARNING: Temperatures are expected in deg K but may actually be in deg C")
 
@@ -487,16 +500,16 @@ class SimultaneousCalibrationAPI(object):
             #   on elevation
             elevation = hdf[lookup['elevation']][:]
             elevation = elevation[np.newaxis,:]\
-                .repeat(nsteps, axis = 0)[:,site_mask]
-            # Assumed to be (T x N) or (T x N x ...)
-            if elevation.ndim == 3:
+                .repeat(nsteps, axis = 0)[mask]
+            # Assumed to be (N) or (N x ...)
+            if elevation.ndim > 1:
                 # If there is a site sub-grid...
                 elevation = elevation.mean(axis = -1)
-            pressure = MOD16_FET.air_pressure(elevation)[t0:]
+            pressure = MOD16_FET.air_pressure(elevation)
 
             # Read in fPAR, LAI
-            fpar = hdf[lookup['fPAR']][t0:][:,site_mask]
-            lai = hdf[lookup['LAI']][t0:][:,site_mask]
+            fpar = hdf[lookup['fPAR']][t0:][mask]
+            lai = hdf[lookup['LAI']][t0:][mask]
 
             # If a heterogeneous sub-grid is used at each tower (i.e., there
             #   is a third axis to these datasets), then average over that
@@ -507,10 +520,8 @@ class SimultaneousCalibrationAPI(object):
                 lai = np.nanmean(lai, axis = -1)
 
         drivers = dict(zip(DRIVER_NAMES, [
-            pft_map, lw_net, sw_rad, sw_albedo, tmean, tmin, tmax, vpd,
+            lw_net, sw_rad, sw_albedo, tmean, tmin, tmax, vpd,
             rhumidity, pressure, fpar, lai]))
-        # Clean the tower observations
-        tower_obs = self.clean_observed(tower_obs)
         return (tower_obs, drivers, weights)
 
     def clean_observed(
@@ -643,6 +654,210 @@ class SimultaneousCalibrationAPI(object):
             sampler.plot_autocorr(**kwargs)
 
     def tune(
+            self, pft: int, plot_trace: bool = False, ipdb: bool = False,
+            save_fig: bool = False, **kwargs):
+        '''
+        Run the MOD16 ET calibration.
+
+        Parameters
+        ----------
+        plot_trace : bool
+            True to plot the trace for a previous calibration run; this will
+            also NOT start a new calibration (Default: False)
+        ipdb : bool
+            True to drop the user into an ipdb prompt, prior to and instead of
+            running calibration
+        save_fig : bool
+            True to save figures to files instead of showing them
+            (Default: False)
+        **kwargs
+            Additional keyword arguments passed to
+            `MOD16StochasticSampler.run()`
+
+        NOTE that `MOD16StochasticSampler` inherits methods from the `mod17`
+        module, including [run()](https://arthur-e.github.io/MOD17/calibration.html#mod17.calibration.StochasticSampler).
+        '''
+        # Pass configuration parameters to MOD16StochasticSampler.run()
+        for key in ('chains', 'draws', 'tune', 'scaling'):
+            if key in self.config['optimization'].keys():
+                kwargs[key] = self.config['optimization'][key]
+
+        # Load the params dict
+        params_dict = restore_bplut(self.config['BPLUT']['ET'])
+        # NOTE: This value was hard-coded in the extant version of MOD16
+        if np.isnan(params_dict['beta']).all():
+            params_dict['beta'] = 250
+        # Convert to the vectorized form expected in the new model
+        params_vector = flatten_params_dict(params_dict)
+
+        # Load the data
+        tower_obs, drivers, weights = self._load_data(pft)
+
+        print('Initializing sampler...')
+        backend = self.config['optimization']['backend']
+        sampler = SimultaneousStochasticSampler(
+            self.config, MOD16_FET._et, params_vector, backend = backend,
+            weights = weights)
+
+        # Either: Enter diagnostic mode or run the sampler
+        if plot_trace or ipdb:
+            # This matplotlib setting prevents labels from overplotting
+            pyplot.rcParams['figure.constrained_layout.use'] = True
+            trace = sampler.get_trace()
+            if ipdb:
+                import ipdb
+                ipdb.set_trace()#FIXME
+            az.plot_trace(trace, var_names = MOD16_FET.required_parameters)
+            pyplot.show()
+            return
+
+        # Get (informative) priors for just those parameters that have them
+        with open(self.config['optimization']['prior'], 'r') as file:
+            prior = yaml.safe_load(file)
+
+        # TODO Someday, MOD17 will be updated to allow "drivers" to be a
+        #   dictionary instead of a sequence; until then: drivers.values()
+        drivers = [drivers[key] for key in DRIVER_NAMES]
+        sampler.run( # Only show the trace plot if not using k-folds
+            tower_obs, drivers, prior = prior, save_fig = save_fig, **kwargs)
+
+
+class SimultaneousCalibrationAPI(CalibrationAPI):
+    '''
+    Convenience class for calibrating the MOD16 ET model. Meant to be used
+    at the command line, in combination with the option to specify a
+    configuration file:
+
+        --config=my_configuration.yaml
+
+    For example, to run calibration for PFT 1, you would write:
+
+        python calibration.py tune --pft=1 --config=my_configuration.yaml
+
+    If `--config` is not provided, the default configuration file,
+    `mod16/MOD16_calibration_config.yaml` will be used.
+    '''
+
+    def __init__(self, config = None):
+        super(SimultaneousCalibrationAPI).__init__()
+
+    def _load_data(self, exceptions: dict = None, use_blacklist = True):
+        'Read in driver datasets from the HDF5 file, structured by years'
+        constraints = dict()
+        with h5py.File(self.hdf5, 'r') as hdf:
+            sites = hdf['site_id'][:].tolist()
+            if hasattr(sites[0], 'decode'):
+                sites = [s.decode('utf-8') for s in sites]
+            # Figure out the calibration reference period (defaults to all
+            #   data available)
+            time = hdf['time'][:]
+            t0 = 0
+            if 'date_start' in self.config['data'].keys():
+                date_start = self.config['data']['date_start']
+                ds = datetime.datetime.strptime(date_start, '%Y-%m-%d')
+                t0 = int(np.argwhere(
+                    np.logical_and(
+                        np.logical_and(time[:,0] == ds.year,
+                            time[:,1] == ds.month),
+                        time[:,2] == ds.day)).ravel()[0])
+            # Number of time steps
+            nsteps = time.shape[0]
+            # In case some tower sites should not be used
+            blacklist = self.config['data']['sites_blacklisted']
+
+            pft_map = hdf[self.config['data']['class_map']]
+            # Also, ensure the blacklist matches the shape of this mask;
+            #   i.e., blacklisted sites should NEVER be used
+            site_mask = np.ones((len(sites),), dtype = np.bool) # Defaults to all
+            if blacklist is not None and use_blacklist:
+                if len(blacklist) > 0:
+                    blacklist = np.array(blacklist)
+                    site_mask = (~np.isin(sites, blacklist))
+
+            # Get tower weights, for when towers are too close together
+            weights = hdf['weights'][:]
+            # If only a single value is given for each site, repeat the weight
+            #   along the time axis
+            if weights.ndim == 1:
+                weights = weights[None,...].repeat(nsteps, axis = 0)
+            weights = weights[t0:,site_mask]
+
+            # Get a (P x T x N) array of PFT fractions; there's a much easier
+            #   way to do this with indexing that *used* to work but no longer:
+            #   pft_map = pft_map[:,(time[:,0] - time[:,0].min())]
+            year_idx = (time[:,0] - time[:,0].min())
+            new_pft_map = []
+            for idx in np.unique(year_idx):
+                n_repeats = np.isin(year_idx, idx).sum()
+                new_pft_map.append(
+                    pft_map[:,idx][:,np.newaxis].repeat(n_repeats, axis = 1))
+            pft_map = np.concatenate(new_pft_map, axis = 1)
+            pft_map = pft_map[:,t0:]
+            # Subset to just those sites we'll be using
+            pft_map = pft_map[...,site_mask]
+
+            # After subsetting the PFT map, time now starts at this start date
+            time = time[t0:]
+
+            # Read in tower observations; we select obs of interest in three
+            #   steps because we want *only* matching tower-day observations
+            #   but we'll want driver data for a full year if that year
+            #   contains *any* matching tower-day observations
+            print('Masking out validation data...')
+            tower_obs = hdf[self.config['data']['target_observable']][t0:,site_mask]
+
+            # Read in driver datasets
+            print('Loading driver datasets...')
+            lookup = self.config['data']['datasets']
+            # Allow exceptions to the configuration file's datasets to be
+            #   specified here; i.e., use a different driver
+            if exceptions is not None:
+                lookup.update(exceptions)
+
+            lw_net = hdf[lookup['LWGNT']][t0:][:,site_mask]
+            sw_rad = hdf[lookup['SWGDN']][t0:][:,site_mask]
+            sw_albedo = hdf[lookup['albedo']][t0:][:,site_mask]
+            tmean = hdf[lookup['Tmean']][t0:][:,site_mask]
+            tmax = hdf[lookup['Tmax']][t0:][:,site_mask]
+            tmin = hdf[lookup['Tmin']][t0:][:,site_mask]
+            vpd = hdf[lookup['VPD']][t0:][:,site_mask]
+            if tmin.min() < 0 or tmin.max() < 100:
+                print("WARNING: Temperatures are expected in deg K but may actually be in deg C")
+
+            # Compute relative humidity
+            rhumidity = MOD16_FET.rhumidity(tmean, vpd)
+
+            # After VPD is calculated, air pressure is based solely
+            #   on elevation
+            elevation = hdf[lookup['elevation']][:]
+            elevation = elevation[np.newaxis,:]\
+                .repeat(nsteps, axis = 0)[:,site_mask]
+            # Assumed to be (T x N) or (T x N x ...)
+            if elevation.ndim == 3:
+                # If there is a site sub-grid...
+                elevation = elevation.mean(axis = -1)
+            pressure = MOD16_FET.air_pressure(elevation)[t0:]
+
+            # Read in fPAR, LAI
+            fpar = hdf[lookup['fPAR']][t0:][:,site_mask]
+            lai = hdf[lookup['LAI']][t0:][:,site_mask]
+
+            # If a heterogeneous sub-grid is used at each tower (i.e., there
+            #   is a third axis to these datasets), then average over that
+            #   sub-grid
+            if sw_albedo.ndim == 3 and fpar.ndim == 3 and lai.ndim == 3:
+                sw_albedo = np.nanmean(sw_albedo, axis = -1)
+                fpar = np.nanmean(fpar, axis = -1)
+                lai = np.nanmean(lai, axis = -1)
+
+        drivers = dict(zip(DRIVER_NAMES, [
+            pft_map, lw_net, sw_rad, sw_albedo, tmean, tmin, tmax, vpd,
+            rhumidity, pressure, fpar, lai]))
+        # Clean the tower observations
+        tower_obs = self.clean_observed(tower_obs)
+        return (tower_obs, drivers, weights)
+
+    def tune(
             self, plot_trace: bool = False, ipdb: bool = False,
             save_fig: bool = False, **kwargs):
         '''
@@ -709,6 +924,7 @@ class SimultaneousCalibrationAPI(object):
         drivers = [drivers[key] for key in DRIVER_NAMES]
         sampler.run( # Only show the trace plot if not using k-folds
             tower_obs, drivers, prior = prior, save_fig = save_fig, **kwargs)
+
 
 
 if __name__ == '__main__':

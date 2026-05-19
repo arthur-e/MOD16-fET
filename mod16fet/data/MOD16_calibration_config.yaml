@@ -4,25 +4,25 @@ BPLUT:
   #   taken from this file
   ET: "/usr/local/dev/MOD16-fET/mod16fet/data/MOD16_BPLUT_C7.0_Endsley_et_al_2025_for_MOD16-fET.csv"
 data:
-  file: "/Stout1/MODIS_VIIRS/CONUS_30m_ET/calibration/MOD16_fET_CONUS_tower_data_v2.h5"
+  file: "/Stout1/MODIS_VIIRS/CONUS_30m_ET/calibration/MOD16_fET_CONUS_tower_data_v4.h5"
   # HDF5 field name for PFT map
   classes: [0,1,2,3,4,5,6,7] # The unique and valid PFT codes
-  class_map: state/PFT_annual_norm
+  class_map: state/PFT_annual
   # If a time-varying PFT map is used, this should be true and the corresponding
   #   "class_map" array (see above) should be a (T x N) array
   classes_are_dynamic: true
   target_observable: FLUXNET/latent_heat # HDF5 field name
-  sites_blacklisted: [ # Validation sites
-    "US-A32", "US-A74", "US-ARb", "US-Blo", "US-CMW", "US-Dia",
-    "US-Esm", "US-HBK", "US-Hn2", "US-Hn3", "US-KFS", "US-KUT",
-    "US-Lin", "US-MH1", "US-MH2", "US-MOz", "US-MSR", "US-MVW",
-    "US-Me2", "US-Me5", "US-Mj2", "US-MtB", "US-NC2", "US-NC4",
-    "US-NR1", "US-NR3", "US-ONA", "US-Oho", "US-PFe", "US-Ro4",
-    "US-SP1", "US-SRC", "US-SRS", "US-Slt", "US-Snd", "US-Sne",
-    "US-Snf", "US-Srr", "US-Syv", "US-Ton", "US-Tw4", "US-Twt",
-    "US-Var", "US-WCr", "US-Whs", "US-Wkg", "US-xHA", "US-xNG",
-    "US-xNQ", "US-xRM", "US-xSJ", "US-xSL", "US-xSP", "US-xSR",
-    "US-xUN", "US-xWR"
+  sites_blacklisted: [ # Validation sites, followed by blacklisted sites
+    'US-Var', 'US-Hn3', 'US-Snf', 'US-Bsg', 'US-xSJ', 'US-Jo2', 'US-Tw2',
+    'US-NC2', 'US-Twt', 'US-Wi1', 'US-PFp', 'US-Slt', 'US-MOz', 'US-Syv',
+    'US-xSE', 'US-xRN', 'US-xHA', 'US-xUN', 'US-NC4', 'US-xJE', 'US-Fmf',
+    'US-SP2', 'US-Fuf', 'US-SP3', 'US-NR1', 'US-Wi4', 'US-NC3', 'US-Me2',
+    'US-GBT', 'US-xSL', 'US-Ro1', 'US-Mj2', 'US-MVW', 'US-ARM', 'US-Bi2',
+    'US-Bo2', 'US-Me6', 'US-MSR', 'US-MVF', 'US-xBL', 'US-PFk', 'US-PFc',
+    'US-xNW', 'US-KFS', 'US-xST', 'US-Fwf', 'US-NC1', 'US-xKZ', 'US-xTR',
+    'US-AR1', # Intensively managed
+    'US-AR2', # Intensively managed
+    'US-Bi1', # Described as "an agricultural field in the San Joaquin Sacramento Delta...of organic peat and sediments"
   ]
   # Time index at which to start (i.e., skip 2001)
   date_start: '2001-01-01'
@@ -40,7 +40,7 @@ data:
     LWGNT: "ERA5/lw_net_24hr" # Net long-wave radiation [W m-2]
 optimization:
   # The filename should have two "%s" formatting characters in it
-  backend: "/Stout1/MODIS_VIIRS/CONUS_30m_ET/calibration/backends/20260325_MOD16-fET_calibration.nc4"
+  backend: "/Stout1/MODIS_VIIRS/CONUS_30m_ET/calibration/backends/20260519_MOD16-fET_calibration.nc4"
   prior: "/usr/local/dev/MOD16-fET/mod16fet/data/MOD16_BPLUT_prior_20251113.yaml"
   chains: 4
   draws: 200
