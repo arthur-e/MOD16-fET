@@ -330,8 +330,8 @@ class SimultaneousStochasticSampler(AbstractSampler):
             with warnings.catch_warnings():
                 warnings.simplefilter('ignore')
                 # NOTE: Changing sampler
-                # step_func = pm.DEMetropolisZ(tune = tune, scaling = scaling)
-                trace = pm.sample_smc(
+                step_func = pm.DEMetropolisZ(tune = tune, scaling = scaling)
+                trace = pm.sample(
                     draws = draws, cores = chains, chains = chains,
                     idata_kwargs = {'log_likelihood': True})
             if self.backend is not None:
@@ -683,7 +683,7 @@ class CalibrationAPI(object):
         params_dict = restore_bplut(self.config['BPLUT']['ET'])
         # NOTE: This value was hard-coded in the extant version of MOD16
         if np.isnan(params_dict['beta']).all():
-            params_dict['beta'] = 250
+            params_dict['beta'] = 250.0
         # NOTE: In the updated calibration scheme, each PFT is treated separately
         params_dict = dict([(k, v[pft]) for k, v in params_dict.items()])
 
@@ -893,7 +893,7 @@ class SimultaneousCalibrationAPI(CalibrationAPI):
         params_dict = restore_bplut(self.config['BPLUT']['ET'])
         # NOTE: This value was hard-coded in the extant version of MOD16
         if np.isnan(params_dict['beta']).all():
-            params_dict['beta'] = 250
+            params_dict['beta'] = 250.0
         # Convert to the vectorized form expected in the new model
         params_vector = flatten_params_dict(params_dict)
 
