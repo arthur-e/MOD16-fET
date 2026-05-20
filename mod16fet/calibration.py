@@ -330,12 +330,15 @@ class SimultaneousStochasticSampler(AbstractSampler):
             with warnings.catch_warnings():
                 warnings.simplefilter('ignore')
                 # NOTE: Changing sampler
-                step_func = pm.DEMetropolisZ(tune = tune, scaling = scaling)
-                trace = pm.sample(
+                # step_func = pm.DEMetropolisZ(tune = tune, scaling = scaling)
+                trace = pm.sample_smc(
                     draws = draws, cores = chains, chains = chains,
                     idata_kwargs = {'log_likelihood': True})
             if self.backend is not None:
                 print('Writing results to file...')
+                # When using sample_smc(), the sample_stats are not correctly
+                #   formatted, so delete them
+                del trace['sample_stats']
                 trace.to_netcdf(self.backend)
             if var_names is None:
                 az.plot_trace(trace, var_names = ['~log_likelihood'])
@@ -676,7 +679,7 @@ class CalibrationAPI(object):
         '''
         # Pass configuration parameters to MOD16StochasticSampler.run()
         for key in ('chains', 'draws', 'tune', 'scaling'):
-            if key in self.config['optimization'].keys():
+            if key in self.config['optimization'].keys() and key not in kwargs.keys():
                 kwargs[key] = self.config['optimization'][key]
 
         # Load the params dict
@@ -691,7 +694,7 @@ class CalibrationAPI(object):
         tower_obs, drivers, weights = self._load_data(pft)
 
         print('Initializing sampler...')
-        backend = self.config['optimization']['backend']
+        backend = self.config['optimization']['backend'] % ('ET', str(pft))
         sampler = SimultaneousStochasticSampler(
             self.config, MOD16_FET._et, params_dict, backend = backend,
             weights = weights)
