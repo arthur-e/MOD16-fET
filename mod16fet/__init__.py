@@ -58,6 +58,7 @@ class MOD16_FET(object):
     - `rbl_max`: Maximum atmospheric boundary layer resistance (s m-1);
     - `beta`: Factor in soil moisture constraint on potential soil
         evaporation, i.e., (VPD / beta); from Bouchet (1963)
+    - `fpar_scale`: Scale by which fPAR should be reduced when LAI < 1
 
     Parameters
     ----------
@@ -68,7 +69,7 @@ class MOD16_FET(object):
     #   then twice the number of parameters (below) would be required
     required_parameters = [
         'tmin_close', 'tmin_open', 'vpd_open', 'vpd_close', 'gl_sh', 'gl_wv',
-        'g_cuticular', 'csl', 'rbl_min', 'rbl_max', 'beta'
+        'g_cuticular', 'csl', 'rbl_min', 'rbl_max', 'beta', 'fpar_scale'
     ]
 
     def __init__(self, params: dict):
@@ -149,11 +150,11 @@ class MOD16_FET(object):
     def _evapotranspiration(
             parameters, lw_net, sw_rad, sw_albedo, tmean, tmin, tmax,
             vpd, rhumidity, pressure, fpar, lai, f_wet = None,
-            tiny = 1e-7, r_corr = None, n_pft = None
+            tiny = 1e-7, r_corr = None, n_pft = None, partitioned = False
         ) -> Number:
         '''
         Optimized ET code, intended for use in model calibration ONLY. The
-        `params` are expected to be given in the order specified by
+        `parameters` are expected to be given in the order specified by
         `MOD16_FET.required_parameters`. NOTE: total ET values returned are in
         [W m-2], for comparison to tower ET values. Divide by the latent heat
         of vaporization (J kg-1) to obtain a mass flux (kg m-2 s-1).
@@ -176,6 +177,10 @@ class MOD16_FET(object):
         n_pft : int
             The number of PFTs present that should be considered; defaults to
             `None` in which case all possible PFTs are considered
+        partitioned : bool
+            False to return total ET (Default), otherwise returns a tuple
+            of three arrays, one for each flux: Transpiration, Canopy
+            evaporation, and Soil evaporation.
 
         Returns
         -------
@@ -221,7 +226,9 @@ class MOD16_FET(object):
             n_pft = len(PFT_VALID)
         # Get the start, end indices of the parameters for each PFT
         starts = np.arange(0, n_params * n_pft, n_params)
-        for i0, i1 in zip(starts, starts + n_params):
+        for p, rng in enumerate(zip(starts, starts + n_params)):
+            i0, i1 = rng
+            pft = PFT_VALID[p]
             # NOTE: Getting the parameters for *this* PFT class;
             #   params[i] below will refer to the ith parameter of the
             #   MOD16_FET.required_parameters vector
@@ -238,6 +245,10 @@ class MOD16_FET(object):
                 # -- Aerodynamic resistance to evaporated water on the wet
                 #   canopy surface ("rhrc")
                 r_a_wet = np.divide(r_h * r_r, r_h + r_r) # (s m-1)
+
+            # NOTE: Scaling fPAR for AFG (PFT=1) at low LAI
+            fpar_scale = params[11]
+            fpar = np.where(lai < 1, fpar * fpar_scale, fpar)
 
             # EVAPORATION FROM WET CANOPY
             e = np.divide(
@@ -306,6 +317,8 @@ class MOD16_FET(object):
             # Result is the sum of the three components
             et_total.append((transpiration[-1] + e_canopy[-1] + e_soil[-1]))
 
+        if partitioned:
+            return (transpiration, e_canopy, e_soil)
         return np.stack(et_total, axis = 0)
 
     @staticmethod

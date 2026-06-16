@@ -106,6 +106,11 @@ NOTE: The biggest improvement needed here is a way for users to specify not
 just the values of the prior and which parameters are fixed but also the
 functional form of the prior; currently, this is hard-coded into the
 `compile_et_model()` function.
+
+Current issues:
+
+- WET has a low bias
+- AFG predicts high rates of ET often when observed ET is near zero
 '''
 
 import datetime
@@ -151,7 +156,7 @@ class SimultaneousStochasticSampler(AbstractSampler):
         The function to call (with driver data and parameters); this function
         should take driver data as positional arguments and the model
         parameters as a `*Sequence`; it should require no external state.
-    params_vector : Sequence or None
+    params_dict : dict or None
         TODO FIXME
     backend : str or None
         Path to a NetCDF4 file backend (Default: None)
@@ -176,7 +181,7 @@ class SimultaneousStochasticSampler(AbstractSampler):
     }
 
     def __init__(
-            self, config: dict, model: Callable, params_vector: Sequence = None,
+            self, config: dict, model: Callable, params_dict: dict = None,
             backend: str = None, weights: Sequence = None,
             constraints: Sequence = None):
         self.backend = backend
@@ -185,7 +190,7 @@ class SimultaneousStochasticSampler(AbstractSampler):
         self.model = model
         if hasattr(model, '__name__'):
             self.name = model.__name__.strip('_').upper() # "_gpp" = "GPP"
-        self.params = params_vector
+        self.params = params_dict
         # Set the model's prior distribution assumptions and any fixed values
         self.prior = dict()
         self.weights = weights
@@ -223,8 +228,6 @@ class SimultaneousStochasticSampler(AbstractSampler):
         -------
         pm.Model
         '''
-        # A function to extract the values of a sequence-valued dictionary
-        repack = lambda d, pft: dict([(k, v[pft]) for k, v in d.items()])
         # Define the objective/ likelihood function
         log_likelihood = BlackBoxLikelihood(
             self.model, observed, x = drivers, weights = self.weights,
@@ -247,10 +250,11 @@ class SimultaneousStochasticSampler(AbstractSampler):
             rbl_min =     pm.Triangular('rbl_min', **self.prior['rbl_min'])
             rbl_max =     pm.Triangular('rbl_max', **self.prior['rbl_max'])
             beta =        pm.Uniform('beta', **self.prior['beta'])
+            fpar_scale =  pm.Triangular('fpar_scale', **self.prior['fpar_scale'])
             # (Stochstic) Priors for unknown model parameters
             params_list = [
                 tmin_close, tmin_open, vpd_open, vpd_close, gl_sh, gl_wv,
-                g_cuticular, csl, rbl_min, rbl_max, beta
+                g_cuticular, csl, rbl_min, rbl_max, beta, fpar_scale
             ]
             # Convert model parameters to a tensor vector
             params_tensor = pt.as_tensor_variable(params_list)
@@ -687,6 +691,9 @@ class CalibrationAPI(object):
         # NOTE: This value was hard-coded in the extant version of MOD16
         if np.isnan(params_dict['beta']).all():
             params_dict['beta'] = 250.0
+        # NOTE: This is an experiment
+        if 'fpar_scale' not in params_dict.keys():
+            params_dict['fpar_scale'] = np.ones((len(PFT_VALID),)) * 1.0
         # NOTE: In the updated calibration scheme, each PFT is treated separately
         params_dict = dict([(k, v[pft]) for k, v in params_dict.items()])
 
