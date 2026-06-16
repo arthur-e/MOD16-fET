@@ -238,9 +238,9 @@ class SimultaneousStochasticSampler(AbstractSampler):
         with pm.Model() as model:
             # NOTE: Parameters shared with MOD17 are fixed based on MOD17
             #   re-calibration
-            tmin_close = self.params['tmin_close']
+            tmin_close =  pm.Uniform('tmin_close', **self.prior['tmin_close'])
             tmin_open = self.params['tmin_open']
-            vpd_open = self.params['vpd_open']
+            vpd_open =    pm.Uniform('vpd_open', **self.prior['vpd_open'])
             vpd_close =   pm.Uniform('vpd_close', **self.prior['vpd_close'])
             gl_sh =       pm.LogNormal('gl_sh', **self.prior['gl_sh'])
             gl_wv =       pm.LogNormal('gl_wv', **self.prior['gl_wv'])
