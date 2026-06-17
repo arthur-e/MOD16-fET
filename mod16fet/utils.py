@@ -25,7 +25,8 @@ BPLUT_FIELD_LOOKUP = {
     'Cl(m/s)':          'csl',
     'RBL_MIN(s/m)':     'rbl_min',
     'RBL_MAX(s/m)':     'rbl_max',
-    'beta':             'beta'
+    'beta':             'beta',
+    'fpar_scale':       'fpar_scale',
 }
 
 def flatten(nested_list):
@@ -33,20 +34,21 @@ def flatten(nested_list):
     return list(itertools.chain(*nested_list))
 
 
-def flatten_params_dict(params_dict):
+def flatten_params_dict(params_dict, precision = 6):
     '''
     Flattens a parameter dictionary across PFTs.
 
     Parameters
     ----------
     params_dict : dict
+    precision : int
 
     Returns
     -------
     list
     '''
     return flatten([
-        [params_dict[k][p] for k in MOD16_FET.required_parameters]
+        [np.round(params_dict[k][p], precision) for k in MOD16_FET.required_parameters]
         for p in PFT_VALID
     ])
 
@@ -101,7 +103,7 @@ def pft_dominant(
 
 def restore_bplut(
         path_or_buffer: FilePath | ReadCsvBuffer | str,
-        nrows: int = 11) -> dict:
+        nrows: int = 12) -> dict:
     '''
     NOTE: I manually exported Maosheng's fixed-width version (fixed-width
     files are a crime) to CSV for easier handling.
@@ -149,7 +151,8 @@ def write_bplut(params_dict: dict, output_path: str):
         The output CSV file path
     '''
     template = os.path.join(
-        os.path.dirname(mod16.__file__), 'data/MOD16_BPLUT_C5.1_05deg_MCD43B_Albedo_MERRA_GMAO.csv')
+        os.path.dirname(mod16fet.__file__),
+        'data/MOD16_BPLUT_C7.0_Endsley_et_al_2025_for_MOD16-fET.csv')
     with open(template, 'r') as file:
         reader = csv.reader(file)
         for line in reader:
@@ -161,6 +164,6 @@ def write_bplut(params_dict: dict, output_path: str):
         writer.writerow(header)
         for name, key in BPLUT_FIELD_LOOKUP.items():
             values = []
-            for pft in mod16.PFT_VALID:
+            for pft in mod16fet.PFT_VALID:
                 values.append(params_dict[key][pft])
             writer.writerow((name, *values))
