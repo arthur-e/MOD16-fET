@@ -1,11 +1,11 @@
 r'''
-    0: Bare Ground/ Litter
-    1: Annual Forbs and Grasses
-    2: Perennial Forbs and Grasses
-    3: Shrubs
-    4: Deciduous Broadleaf Trees
-    5: Evergreen Needleleaf Trees
-    6: Evergreen Broadleaf Trees
+    0: Annual Forbs and Grasses
+    1: Perennial Forbs and Grasses
+    2: Evergreen Needleleaf Trees
+    3: Deciduous Broadleaf Trees
+    4: Evergreen Broadleaf Trees
+    5: Shrubs
+    6: Bare Ground/ Litter
     7: Wetlands
 '''
 
@@ -19,6 +19,7 @@ from numbers import Number
 from mod17 import linear_constraint
 
 PFT_VALID = (0,1,2,3,4,5,6,7)
+PFT_NAMES = ['AFG', 'PFG', 'ENF', 'DBF', 'EBF', 'SHR', 'BAR', 'WET']
 STEFAN_BOLTZMANN = 5.67e-8 # Stefan-Boltzmann constant, W m-2 K-4
 SPECIFIC_HEAT_CAPACITY_AIR = 1013 # J kg-1 K-1, Monteith & Unsworth (2001)
 # Ratio of molecular weight of water vapor to that of dry air (ibid.)

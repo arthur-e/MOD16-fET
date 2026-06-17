@@ -13,13 +13,14 @@ data:
   classes_are_dynamic: true
   target_observable: FLUXNET/latent_heat # HDF5 field name
   sites_blacklisted: [ # Validation sites, followed by blacklisted sites
-    'US-Var', 'US-Hn3', 'US-Snf', 'US-Bsg', 'US-xSJ', 'US-Jo2', 'US-Tw2',
-    'US-NC2', 'US-Twt', 'US-Wi1', 'US-PFp', 'US-Slt', 'US-MOz', 'US-Syv',
-    'US-xSE', 'US-xRN', 'US-xHA', 'US-xUN', 'US-NC4', 'US-xJE', 'US-Fmf',
-    'US-SP2', 'US-Fuf', 'US-SP3', 'US-NR1', 'US-Wi4', 'US-NC3', 'US-Me2',
-    'US-GBT', 'US-xSL', 'US-Ro1', 'US-Mj2', 'US-MVW', 'US-ARM', 'US-Bi2',
-    'US-Bo2', 'US-Me6', 'US-MSR', 'US-MVF', 'US-xBL', 'US-PFk', 'US-PFc',
-    'US-xNW', 'US-KFS', 'US-xST', 'US-Fwf', 'US-NC1', 'US-xKZ', 'US-xTR',
+    'US-Hn3', 'US-A32', 'US-Ton', 'US-Hn2', 'US-xSJ', 'US-Snf', 'US-Dia',
+    'US-Var', 'US-xNQ', 'US-KFS', 'US-Ro4', 'US-Snd', 'US-ARb', 'US-Sne',
+    'US-NR3', 'US-xNG', 'US-ONA', 'US-KUT', 'US-Wkg', 'US-NC2', 'US-xRM',
+    'US-Me5', 'US-MtB', 'US-NR1', 'US-Blo', 'US-Me2', 'US-xWR', 'US-SP1',
+    'US-HBK', 'US-CMW', 'US-Syv', 'US-MOz', 'US-xUN', 'US-xHA', 'US-Oho',
+    'US-WCr', 'US-Slt', 'US-xSP', 'US-SRC', 'US-SRS', 'US-Whs', 'US-xSR',
+    'US-A74', 'US-MVW', 'US-Lin', 'US-Mj2', 'US-MH2', 'US-MH1', 'US-MSR',
+    'US-xSL', 'US-NC4', 'US-Tw4', 'US-Esm', 'US-Twt', 'US-PFe', 'US-Srr',
     'US-AR1', # Intensively managed
     'US-AR2', # Intensively managed
     'US-Bi1', # Described as "an agricultural field in the San Joaquin Sacramento Delta...of organic peat and sediments"
