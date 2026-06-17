@@ -238,9 +238,9 @@ class SimultaneousStochasticSampler(AbstractSampler):
         with pm.Model() as model:
             # NOTE: Parameters shared with MOD17 are fixed based on MOD17
             #   re-calibration
-            tmin_close =  pm.Uniform('tmin_close', **self.prior['tmin_close'])
-            tmin_open = self.params['tmin_open']
-            vpd_open =    pm.Uniform('vpd_open', **self.prior['vpd_open'])
+            tmin_close =  self.params['tmin_close']
+            tmin_open =   self.params['tmin_open']
+            vpd_open =    self.params['vpd_open']
             vpd_close =   pm.Uniform('vpd_close', **self.prior['vpd_close'])
             gl_sh =       pm.LogNormal('gl_sh', **self.prior['gl_sh'])
             gl_wv =       pm.LogNormal('gl_wv', **self.prior['gl_wv'])
@@ -684,6 +684,11 @@ class CalibrationAPI(object):
         # Pass configuration parameters to MOD16StochasticSampler.run()
         for key in ('chains', 'draws', 'tune', 'scaling'):
             if key in self.config['optimization'].keys() and key not in kwargs.keys():
+                # "draws" may be a PFT-specific sequence of values
+                if key == 'draws':
+                    if hasattr(self.config['optimization']['draws'], '__len__'):
+                        self.config['optimization']['draws'] =\
+                            self.config['optimization']['draws'][pft]
                 kwargs[key] = self.config['optimization'][key]
 
         # Load the params dict
