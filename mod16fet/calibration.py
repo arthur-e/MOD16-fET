@@ -192,6 +192,7 @@ class SimultaneousStochasticSampler(AbstractSampler):
             self.name = model.__name__.strip('_').upper() # "_gpp" = "GPP"
         self.params = params_dict
         # Set the model's prior distribution assumptions and any fixed values
+        self.fixed = dict()
         self.prior = dict()
         self.weights = weights
         assert os.path.exists(os.path.dirname(backend))
@@ -260,6 +261,21 @@ class SimultaneousStochasticSampler(AbstractSampler):
             params_tensor = pt.as_tensor_variable(params_list)
             # Key step: Define the log-likelihood as an added potential
             pm.Potential('likelihood', log_likelihood(params_tensor))
+        # If the value for this parameter (and this PFT) is fixed...
+        fixed = dict()
+        for i, name in enumerate(self.required_parameters['ET']):
+            if self.fixed is not None:
+                if name in self.fixed.keys():
+                    if self.fixed[name] is not None:
+                        # e.g., {beta: fixed_value}
+                        fixed[getattr(model, name)] = self.fixed[name]
+        if len(fixed) > 0:
+            print('-- One or more parameters are fixed:')
+            print('--', fixed)
+            # i.e., Return "a distinct PyMC model with the relevant variables
+            #   replaced by the intervention expressions; all remaining
+            #   variables are cloned"
+            return pm.do(model, fixed)
         return model
 
     def run(
@@ -313,6 +329,7 @@ class SimultaneousStochasticSampler(AbstractSampler):
         assert len(drivers) == len(self.required_drivers[self.name]),\
             'Did not receive expected number of driver datasets!'
         assert tune in ('lambda', 'scaling') or tune is None
+        self.fixed.update(fixed) # Update parameters with fixed values
         self.prior.update(prior) # Update prior assumptions
         # Generate an initial goodness-of-fit score
         params = [self.params[k] for k in MOD16_FET.required_parameters]
@@ -733,11 +750,22 @@ class CalibrationAPI(object):
             for p in prior_params
         ])
 
+        # Determine whether any parameters are fixed
+        fixed = []
+        for name in MOD16_FET.required_parameters:
+            if self.config['optimization']['fixed'] is None:
+                break
+            if name in self.config['optimization']['fixed'].keys():
+                fixed.append(
+                    (name, self.config['optimization']['fixed'][name][pft]))
+        fixed = dict(fixed)
+
         # TODO Someday, MOD17 will be updated to allow "drivers" to be a
         #   dictionary instead of a sequence; until then: drivers.values()
         drivers = [drivers[key] for key in DRIVER_NAMES]
         sampler.run( # Only show the trace plot if not using k-folds
-            tower_obs, drivers, prior = prior, save_fig = save_fig, **kwargs)
+            tower_obs, drivers, prior = prior, fixed = fixed,
+            save_fig = save_fig, **kwargs)
 
 
 class SimultaneousCalibrationAPI(CalibrationAPI):
