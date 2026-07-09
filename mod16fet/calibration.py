@@ -531,6 +531,12 @@ class CalibrationAPI(object):
             # Read in fPAR, LAI
             fpar = hdf[lookup['fPAR']][t0:][mask]
             lai = hdf[lookup['LAI']][t0:][mask]
+            if 'MOD15A2H' in lookup['fPAR']:
+                print('NOTE: Re-scaling fPAR to geophysical units')
+                fpar = np.nanmean(fpar, axis = -1) / 100
+            if 'MOD15A2H' in lookup['LAI']:
+                print('NOTE: Re-scaling LAI to geophysical units')
+                lai = np.nanmean(lai, axis = -1) / 10
 
             # If a heterogeneous sub-grid is used at each tower (i.e., there
             #   is a third axis to these datasets), then average over that
