@@ -405,7 +405,9 @@ class CalibrationAPI(object):
                 lambda x: signal.filtfilt(window, np.ones(1), x), 0, raw)
         return raw # Or, revert to the raw data
 
-    def _load_data(self, pft: int, exceptions: dict = None, use_blacklist = True):
+    def _load_data(
+            self, pft: int, exceptions: dict = None, use_blacklist = True,
+            verbose = True):
         'Read in driver datasets from the HDF5 file, structured by years'
         constraints = dict()
         with h5py.File(self.hdf5, 'r') as hdf:
@@ -440,7 +442,8 @@ class CalibrationAPI(object):
                 datetime.date(*ymd).year for ymd in time[:].tolist()
             ])
             if pft_array.shape[0] != years.size:
-                print('WARNING: First axis of class_map does not match the length of the "time" vector; reshaping to fit')
+                if verbose:
+                    print('WARNING: First axis of class_map does not match the length of the "time" vector; reshaping to fit')
                 pft_map = pft_array[years - years.min()]
 
             # If any days of this year correspond to the current PFT, select
@@ -484,7 +487,8 @@ class CalibrationAPI(object):
             #   steps because we want *only* matching tower-day observations
             #   but we'll want driver data for a full year if that year
             #   contains *any* matching tower-day observations
-            print('Masking out validation data...')
+            if verbose:
+                print('Masking out validation data...')
             tower_obs = hdf[self.config['data']['target_observable']][t0:]
             # Clean the tower observations
             tower_obs = self.clean_observed(tower_obs)
@@ -497,7 +501,8 @@ class CalibrationAPI(object):
             weights = weights[mask]
 
             # Read in driver datasets
-            print('Loading driver datasets...')
+            if verbose:
+                print('Loading driver datasets...')
             lookup = self.config['data']['datasets']
             # Allow exceptions to the configuration file's datasets to be
             #   specified here; i.e., use a different driver
@@ -511,7 +516,7 @@ class CalibrationAPI(object):
             tmax = hdf[lookup['Tmax']][t0:][mask]
             tmin = hdf[lookup['Tmin']][t0:][mask]
             vpd = hdf[lookup['VPD']][t0:][mask]
-            if tmin.min() < 0 or tmin.max() < 100:
+            if verbose and tmin.min() < 0 or tmin.max() < 100:
                 print("WARNING: Temperatures are expected in deg K but may actually be in deg C")
 
             # Compute relative humidity
@@ -532,10 +537,12 @@ class CalibrationAPI(object):
             fpar = hdf[lookup['fPAR']][t0:][mask]
             lai = hdf[lookup['LAI']][t0:][mask]
             if 'MOD15A2H' in lookup['fPAR']:
-                print('NOTE: Re-scaling fPAR to geophysical units')
+                if verbose:
+                    print('NOTE: Re-scaling fPAR to geophysical units')
                 fpar = np.nanmean(fpar, axis = -1) / 100
             if 'MOD15A2H' in lookup['LAI']:
-                print('NOTE: Re-scaling LAI to geophysical units')
+                if verbose:
+                    print('NOTE: Re-scaling LAI to geophysical units')
                 lai = np.nanmean(lai, axis = -1) / 10
 
             # If a heterogeneous sub-grid is used at each tower (i.e., there

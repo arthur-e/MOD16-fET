@@ -6,7 +6,18 @@ Fractional MOD16 (MOD16-fET) Model
 
 - Daily, instantaneous ET estimation, instead of separate nighttime and daytime estimates
 - Improved ground heat flux estimation based on Santanello & Friedl (2003)
-- Weighted average of ET across fractional land-cover types
+- Weighted average of ET across fractional land-cover types:
+
+| Code  | Abbreviation| Name                        |
+|:------|:------------|:----------------------------|
+| 0     | AFG         | Annual Forbs and Grasses    |
+| 1     | PFG         | Perennial Forbs and Grasses |
+| 2     | ENF         | Evergreen Needleleaf Trees  |
+| 3     | DBF         | Deciduous Broadleaf Trees   |
+| 4     | EBF         | Evergreen Broadleaf Trees   |
+| 5     | SHR         | Shrubs                      |
+| 6     | BAR         | Bare Ground/ Litter         |
+| 7     | WET         | Wetlands                    |
 
 
 Installation and Tests
