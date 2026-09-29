@@ -773,6 +773,17 @@ class CalibrationAPI(object):
                     (name, self.config['optimization']['fixed'][name][pft]))
         fixed = dict(fixed)
 
+        # Set var_names to tell ArviZ to plot only the free parameters; i.e.,
+        #   those with priors and which are not fixed
+        var_names = list(filter(
+            lambda x: x in prior.keys(), MOD16_FET.required_parameters))
+        # Remove any random variables that have fixed values from the list
+        #   of variables to be plotted
+        for key in fixed.keys():
+            if fixed[key] is not None and key in var_names:
+                var_names.remove(key)
+        kwargs.update({'var_names': var_names})
+
         # TODO Someday, MOD17 will be updated to allow "drivers" to be a
         #   dictionary instead of a sequence; until then: drivers.values()
         drivers = [drivers[key] for key in DRIVER_NAMES]

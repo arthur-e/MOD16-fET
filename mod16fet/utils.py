@@ -9,7 +9,7 @@ import os
 import numpy as np
 import pandas as pd
 import mod16fet
-from mod16fet import PFT_VALID, MOD16_FET
+from mod16fet import PFT_VALID, PFT_NAMES, MOD16_FET
 from collections import Counter
 from typing import Callable, Sequence
 from pandas._typing import FilePath, ReadCsvBuffer
@@ -123,6 +123,8 @@ def restore_bplut(
     # Remaps Maosheng's PFT order to the actual PFT code from MCD12Q1
     #   LC_Type2
     data = pd.read_csv(path_or_buffer, nrows = nrows)
+    # Remove any spaces that appear as part of a column name
+    data = data.rename(columns = dict(map(lambda x: (x, x.strip()), data.columns)))
     # Create a dictionary with an array for every key
     output = dict([
         (k, np.full((len(PFT_VALID),), np.nan))
@@ -130,12 +132,10 @@ def restore_bplut(
     ])
     # Assumes the first column indexes the parameter/ field names
     field_index = data.columns[0]
-    pft_index = list(data.columns)
-    pft_index.remove(field_index)
     for k, key in enumerate(data[field_index]):
         if key not in data[data.columns[0]].values:
             continue # e.g., "beta" not included in Collection 5.x
-        values = data.loc[data[field_index] == key, pft_index].values.ravel()
+        values = data.loc[data[field_index] == key, PFT_NAMES].values.ravel()
         output[BPLUT_FIELD_LOOKUP[key]][pft_lookup] = values
     return output
 
